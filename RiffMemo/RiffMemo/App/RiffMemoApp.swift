@@ -6,16 +6,25 @@
 //
 
 import SwiftUI
-import CoreData
+import SwiftData
 
 @main
 struct RiffMemoApp: App {
-    let persistenceController = PersistenceController.shared
+    // SwiftData container
+    let modelContainer: ModelContainer
+
+    init() {
+        do {
+            modelContainer = try ModelContainer(for: Recording.self)
+        } catch {
+            fatalError("Failed to initialize ModelContainer: \(error)")
+        }
+    }
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environment(\.managedObjectContext, persistenceController.container.viewContext)
+            MainTabView(modelContainer: modelContainer)
         }
+        .modelContainer(modelContainer)
     }
 }

@@ -16,6 +16,10 @@ actor AudioRecordingManager {
     private var audioEngine: AVAudioEngine?
     private var audioFile: AVAudioFile?
     private var isRecording = false
+    private var inputNode: AVAudioInputNode?
+
+    // Callback for real-time audio level updates
+    nonisolated(unsafe) var onAudioLevel: (@Sendable (Float) -> Void)?
 
     // MARK: - Public Methods
 
@@ -34,26 +38,52 @@ actor AudioRecordingManager {
         Logger.info("Audio recording started", category: Logger.audio)
     }
 
-    func stopRecording() async throws -> Recording {
+    func stopRecording(duration: TimeInterval) async throws -> Recording {
         guard isRecording else {
             throw AudioError.notRecording
         }
 
+        // Remove tap from input node BEFORE stopping engine
+        // This ensures audio data is properly flushed to file
+        if let inputNode = inputNode {
+            inputNode.removeTap(onBus: 0)
+        }
+
+        // Stop the engine
         audioEngine?.stop()
         isRecording = false
+
+        // Give the file system a moment to flush all buffers to disk
+        try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
 
         // Create recording object
         guard let audioFile = audioFile else {
             throw AudioError.noAudioFile
         }
 
+        // Get file size for debugging
+        let fileSize = (try? FileManager.default.attributesOfItem(atPath: audioFile.url.path)[.size] as? Int64) ?? 0
+
+        // Calculate actual duration from audio file
+        let calculatedDuration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
+
+        // Use the more accurate duration (prefer calculated from file)
+        let finalDuration = calculatedDuration > 0 ? calculatedDuration : duration
+
         let recording = Recording(
             title: "New Recording",
-            duration: 0, // TODO: Calculate from audio file
-            audioFileURL: audioFile.url
+            duration: finalDuration,
+            audioFileURL: audioFile.url,
+            fileSize: fileSize
         )
 
-        Logger.info("Audio recording stopped", category: Logger.audio)
+        Logger.info("Audio recording stopped - Duration: \(finalDuration)s, File size: \(fileSize) bytes", category: Logger.audio)
+
+        // Clean up references for next recording
+        self.audioEngine = nil
+        self.audioFile = nil
+        self.inputNode = nil
+
         return recording
     }
 
@@ -69,6 +99,9 @@ actor AudioRecordingManager {
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
 
+        // Store reference to input node so we can remove tap later
+        self.inputNode = inputNode
+
         // Configure audio format
         let format = inputNode.outputFormat(forBus: 0)
 
@@ -80,13 +113,43 @@ actor AudioRecordingManager {
         let file = try AVAudioFile(forWriting: audioFileURL, settings: format.settings)
         audioFile = file
 
-        // Install tap to write audio data
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, _ in
+        // Install tap to write audio data AND calculate levels
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in
+            // Write audio to file
             try? file.write(from: buffer)
+
+            // Calculate and send audio level
+            if let level = self?.calculateLevel(from: buffer) {
+                self?.onAudioLevel?(level)
+            }
         }
 
         try engine.start()
         self.audioEngine = engine
+    }
+
+    private nonisolated func calculateLevel(from buffer: AVAudioPCMBuffer) -> Float {
+        guard let channelData = buffer.floatChannelData else { return 0 }
+
+        let channelDataValue = channelData.pointee
+        let frameLength = Int(buffer.frameLength)
+
+        // Calculate RMS (Root Mean Square) for more accurate level representation
+        var sum: Float = 0
+        for i in 0..<frameLength {
+            let sample = channelDataValue[i]
+            sum += sample * sample // Square each sample
+        }
+
+        // Calculate RMS
+        let rms = sqrt(sum / Float(frameLength))
+
+        // Convert to decibels and normalize to 0-1 range
+        // Reference level: -50 dB (quiet) to 0 dB (loud)
+        let decibels = 20 * log10(rms)
+        let normalizedLevel = max(0, min(1, (decibels + 50) / 50))
+
+        return normalizedLevel
     }
 }
 
