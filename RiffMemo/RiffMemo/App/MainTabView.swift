@@ -37,6 +37,12 @@ struct MainTabView: View {
             .tabItem {
                 Label("Library", systemImage: "music.note.list")
             }
+
+            // Settings Tab
+            SettingsView()
+                .tabItem {
+                    Label("Settings", systemImage: "gearshape")
+                }
         }
     }
 }

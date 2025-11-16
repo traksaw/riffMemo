@@ -18,10 +18,13 @@ class LibraryViewModel {
     var recordings: [Recording] = []
     var searchText: String = ""
     var selectedFilter: RecordingFilter = .all
+    var isGeneratingWaveforms: Bool = false
+    var waveformProgress: Double = 0
 
     // MARK: - Dependencies
 
     private let repository: RecordingRepository
+    private let waveformGenerator = WaveformGenerator()
 
     // MARK: - Initialization
 
@@ -53,7 +56,97 @@ class LibraryViewModel {
     }
 
     func toggleFavorite(_ recording: Recording) async {
-        // TODO: Implement favorite toggle
+        recording.isFavorite.toggle()
+        Logger.info("Toggled favorite for: \(recording.title)", category: Logger.data)
+    }
+
+    // MARK: - Batch Waveform Generation
+
+    /// Generates waveforms for all recordings that don't have cached waveforms
+    /// Uses background priority to avoid blocking UI
+    func generateMissingWaveforms() async {
+        let recordingsNeedingWaveforms = recordings.filter { $0.waveformData == nil }
+
+        guard !recordingsNeedingWaveforms.isEmpty else {
+            Logger.info("All recordings already have waveforms", category: Logger.audio)
+            return
+        }
+
+        isGeneratingWaveforms = true
+        waveformProgress = 0
+
+        Logger.info("Generating waveforms for \(recordingsNeedingWaveforms.count) recordings", category: Logger.audio)
+
+        for (index, recording) in recordingsNeedingWaveforms.enumerated() {
+            do {
+                // Generate with lower priority to not block UI
+                let waveformData = try await waveformGenerator.generateWaveformData(
+                    from: recording.audioFileURL,
+                    targetSamples: 100 // Thumbnails use 100 samples
+                )
+
+                recording.waveformData = waveformData
+
+                // Update progress
+                waveformProgress = Double(index + 1) / Double(recordingsNeedingWaveforms.count)
+
+                Logger.info("Generated waveform \(index + 1)/\(recordingsNeedingWaveforms.count)", category: Logger.audio)
+
+            } catch {
+                Logger.error("Failed to generate waveform for \(recording.title): \(error)", category: Logger.audio)
+            }
+
+            // Small delay to keep UI responsive
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+
+        isGeneratingWaveforms = false
+        waveformProgress = 0
+
+        Logger.info("Batch waveform generation complete", category: Logger.audio)
+    }
+
+    /// Pre-generates waveforms for the first N recordings for instant display
+    func preloadWaveforms(count: Int = 10) async {
+        let recordingsToPreload = recordings
+            .prefix(count)
+            .filter { $0.waveformData == nil }
+
+        guard !recordingsToPreload.isEmpty else { return }
+
+        Logger.info("Preloading waveforms for \(recordingsToPreload.count) recordings", category: Logger.audio)
+
+        for recording in recordingsToPreload {
+            do {
+                let waveformData = try await waveformGenerator.generateWaveformData(
+                    from: recording.audioFileURL,
+                    targetSamples: 100
+                )
+                recording.waveformData = waveformData
+            } catch {
+                Logger.error("Failed to preload waveform: \(error)", category: Logger.audio)
+            }
+        }
+    }
+
+    // MARK: - Analysis
+
+    /// Analyzes all unanalyzed recordings
+    func analyzeAll() {
+        let unanalyzed = recordings.filter { $0.lastAnalyzedDate == nil }
+
+        guard !unanalyzed.isEmpty else {
+            Logger.info("All recordings already analyzed", category: Logger.audio)
+            return
+        }
+
+        Logger.info("Queuing \(unanalyzed.count) recordings for analysis", category: Logger.audio)
+        AudioAnalysisManager.shared.queueBatchAnalysis(unanalyzed)
+    }
+
+    /// Returns count of unanalyzed recordings
+    var unanalyzedCount: Int {
+        recordings.filter { $0.lastAnalyzedDate == nil }.count
     }
 }
 

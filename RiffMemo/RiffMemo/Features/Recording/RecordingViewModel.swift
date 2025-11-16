@@ -85,6 +85,11 @@ class RecordingViewModel {
                 audioLevel = 0 // Reset audio level
                 try await repository.save(recording)
                 Logger.info("Recording stopped and saved with duration: \(duration)s", category: Logger.audio)
+
+                // Queue automatic analysis
+                AudioAnalysisManager.shared.queueAnalysis(recording)
+                Logger.info("Queued automatic analysis for: \(recording.title)", category: Logger.audio)
+
             } catch {
                 errorMessage = "Failed to save recording: \(error.localizedDescription)"
                 showError = true

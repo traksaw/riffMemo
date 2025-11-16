@@ -25,6 +25,17 @@ final class Recording {
     var detectedBPM: Int?
     var detectedKey: String?
     var detectedInstrument: String?
+    var waveformData: Data?
+
+    // Audio quality metrics
+    var audioQuality: String?       // "Excellent", "Good", "Fair", "Poor"
+    var peakLevel: Double?           // dB
+    var rmsLevel: Double?            // dB
+    var dynamicRange: Double?        // dB
+
+    // Analysis metadata
+    var lastAnalyzedDate: Date?
+    var analysisVersion: String?     // Track which version of analysis was used
 
     // User metadata
     var rating: Int
@@ -43,6 +54,13 @@ final class Recording {
         detectedBPM: Int? = nil,
         detectedKey: String? = nil,
         detectedInstrument: String? = nil,
+        waveformData: Data? = nil,
+        audioQuality: String? = nil,
+        peakLevel: Double? = nil,
+        rmsLevel: Double? = nil,
+        dynamicRange: Double? = nil,
+        lastAnalyzedDate: Date? = nil,
+        analysisVersion: String? = nil,
         rating: Int = 0,
         isFavorite: Bool = false,
         notes: String? = nil
@@ -58,6 +76,13 @@ final class Recording {
         self.detectedBPM = detectedBPM
         self.detectedKey = detectedKey
         self.detectedInstrument = detectedInstrument
+        self.waveformData = waveformData
+        self.audioQuality = audioQuality
+        self.peakLevel = peakLevel
+        self.rmsLevel = rmsLevel
+        self.dynamicRange = dynamicRange
+        self.lastAnalyzedDate = lastAnalyzedDate
+        self.analysisVersion = analysisVersion
         self.rating = rating
         self.isFavorite = isFavorite
         self.notes = notes

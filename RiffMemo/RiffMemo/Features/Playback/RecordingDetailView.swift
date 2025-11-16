@@ -9,32 +9,54 @@ import SwiftUI
 
 struct RecordingDetailView: View {
     @State private var viewModel: RecordingDetailViewModel
+    @State private var waveformViewModel: WaveformViewModel
     let recording: Recording
 
     init(recording: Recording, viewModel: RecordingDetailViewModel) {
         self.recording = recording
         self.viewModel = viewModel
+        self.waveformViewModel = WaveformViewModel(recording: recording)
     }
 
     var body: some View {
-        VStack(spacing: 32) {
-            Spacer()
+        ScrollView {
+            VStack(spacing: 32) {
+                Spacer()
+                    .frame(height: 20)
 
-            // Recording Title
-            VStack(spacing: 8) {
-                Text(recording.title)
-                    .font(.title)
-                    .fontWeight(.semibold)
+                // Recording Title
+                VStack(spacing: 8) {
+                    Text(recording.title)
+                        .font(.title)
+                        .fontWeight(.semibold)
 
-                Text(recording.createdDate.formattedForRecording())
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    Text(recording.createdDate.formattedForRecording())
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+            // Interactive Waveform Visualization
+            Group {
+                if waveformViewModel.isLoading {
+                    ProgressView("Loading waveform...")
+                        .frame(height: 120)
+                } else if !waveformViewModel.samples.isEmpty {
+                    WaveformView(
+                        samples: waveformViewModel.samples,
+                        configuration: .default,
+                        currentProgress: viewModel.duration > 0 ? viewModel.currentTime / viewModel.duration : 0,
+                        onSeek: { progress in
+                            let seekTime = progress * viewModel.duration
+                            viewModel.seek(to: seekTime)
+                        }
+                    )
+                    .frame(height: 120)
+                } else {
+                    WaveformPlaceholder()
+                        .frame(height: 120)
+                }
             }
-
-            // Waveform Placeholder (simple visualization for now)
-            WaveformPlaceholder()
-                .frame(height: 120)
-                .padding(.horizontal)
+            .padding(.horizontal)
 
             // Time Display
             HStack {
@@ -83,27 +105,25 @@ struct RecordingDetailView: View {
             }
             .buttonStyle(.plain)
 
-            // Metadata
-            if recording.detectedBPM != nil || recording.detectedKey != nil {
-                HStack(spacing: 20) {
-                    if let bpm = recording.detectedBPM {
-                        Label("\(bpm) BPM", systemImage: "metronome")
-                            .font(.subheadline)
-                            .foregroundStyle(.blue)
-                    }
-
-                    if let key = recording.detectedKey {
-                        Label(key, systemImage: "music.note")
-                            .font(.subheadline)
-                            .foregroundStyle(.purple)
-                    }
-                }
+            // Analysis Results
+            if recording.detectedBPM != nil || recording.detectedKey != nil || recording.audioQuality != nil {
+                AnalysisResultsView(recording: recording)
+                    .padding(.horizontal)
+            } else {
+                // Analyze button if not yet analyzed
+                AnalyzeButton(recording: recording)
+                    .padding(.horizontal)
             }
 
             Spacer()
+                .frame(height: 40)
+            }
+            .padding()
         }
-        .padding()
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await waveformViewModel.loadWaveform()
+        }
         .onDisappear {
             viewModel.stop()
         }

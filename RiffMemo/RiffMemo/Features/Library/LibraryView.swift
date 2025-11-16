@@ -57,14 +57,55 @@ struct LibraryView: View {
             .navigationTitle("Recordings")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    // Analyze all button
+                    if viewModel.unanalyzedCount > 0 {
+                        Button(action: {
+                            viewModel.analyzeAll()
+                            HapticManager.shared.lightTap()
+                        }) {
+                            Label("Analyze All", systemImage: "waveform.badge.magnifyingglass")
+                                .font(.caption)
+                        }
+                    }
+                }
+
                 ToolbarItem(placement: .topBarTrailing) {
-                    Text("\(viewModel.recordings.count)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 12) {
+                        // Waveform generation indicator
+                        if viewModel.isGeneratingWaveforms {
+                            HStack(spacing: 6) {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                Text("\(Int(viewModel.waveformProgress * 100))%")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        // Analysis status
+                        if AudioAnalysisManager.shared.isAnalyzing {
+                            HStack(spacing: 4) {
+                                Image(systemName: "waveform")
+                                    .font(.caption)
+                                    .foregroundStyle(.blue)
+                                Text("Analyzing")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        // Recording count
+                        Text("\(viewModel.recordings.count)")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .task {
                 await viewModel.loadRecordings()
+                // Preload waveforms for first 10 recordings
+                await viewModel.preloadWaveforms(count: 10)
             }
         }
     }
@@ -116,6 +157,12 @@ struct RecordingRow: View {
                     .buttonStyle(.borderless) // Prevent navigation when tapping edit button
                 }
             }
+
+            // Waveform Thumbnail
+            WaveformThumbnail(recording: recording, height: 40)
+                .frame(maxWidth: .infinity)
+                .background(Color.gray.opacity(0.05))
+                .cornerRadius(6)
 
             // Metadata
             HStack {
