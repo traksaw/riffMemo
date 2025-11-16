@@ -19,7 +19,7 @@ jobs:
       run: xcodebuild -version
 
     - name: List available simulators
-      run: xcrun simctl list devices available
+      run: xcrun simctl list devices available iPhone
 
     - name: Build for testing
       run: |
@@ -27,17 +27,17 @@ jobs:
         xcodebuild clean build \
           -project RiffMemo.xcodeproj \
           -scheme RiffMemo \
-          -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+          -destination 'generic/platform=iOS Simulator' \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO
 
-    - name: Run tests
+    - name: Run tests (if available)
       run: |
         cd RiffMemo
         xcodebuild test \
           -project RiffMemo.xcodeproj \
           -scheme RiffMemo \
-          -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+          -destination 'generic/platform=iOS Simulator' \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           -only-testing:RiffMemoTests || true
