@@ -20,6 +20,8 @@ class RecordingViewModel {
     var isRecording: Bool = false
     var currentDuration: TimeInterval = 0
     var audioLevel: Float = 0.0
+    var frequencyMagnitudes: [Float] = []
+    var waveformSamples: [Float] = []
     var detectedPitch: String?
 
     // Metronome settings for current recording
@@ -40,6 +42,10 @@ class RecordingViewModel {
     private var durationTimer: Timer?
     private var recordingStartTime: Date?
     private var cancellables = Set<AnyCancellable>()
+    private var waveformBuffer: [Float] = []
+    private let maxWaveformSamples = 150
+    private var samplesSinceLastUpdate: Int = 0
+    private let samplesPerUpdate: Int = 2  // Update display every 2 samples (Shape is very efficient)
 
     // MARK: - Initialization
 
@@ -59,14 +65,34 @@ class RecordingViewModel {
             do {
                 // Set up audio level callback
                 await audioRecorder.onAudioLevel = { [weak self] level in
-                    Task { @MainActor in
+                    guard let self = self else { return }
+                    Task { @MainActor [weak self] in
                         self?.audioLevel = level
+                    }
+                }
+
+                // Set up frequency data callback
+                await audioRecorder.onFrequencyData = { [weak self] frequencies in
+                    guard let self = self else { return }
+                    Task { @MainActor [weak self] in
+                        self?.frequencyMagnitudes = frequencies
+                    }
+                }
+
+                // Set up waveform sample callback
+                await audioRecorder.onWaveformSample = { [weak self] sample in
+                    guard let self = self else { return }
+                    Task { @MainActor [weak self] in
+                        self?.addWaveformSample(sample)
                     }
                 }
 
                 try await audioRecorder.startRecording()
                 isRecording = true
                 currentDuration = 0
+                waveformBuffer.removeAll()
+                waveformSamples = []
+                samplesSinceLastUpdate = 0  // Reset throttle counter
                 recordingStartTime = Date()
                 startDurationTimer()
                 Logger.info("Recording started", category: Logger.audio)
@@ -136,6 +162,26 @@ class RecordingViewModel {
         durationTimer?.invalidate()
         durationTimer = nil
         recordingStartTime = nil
+    }
+
+    private func addWaveformSample(_ sample: Float) {
+        waveformBuffer.append(sample)
+
+        // Keep only the most recent samples
+        if waveformBuffer.count > maxWaveformSamples {
+            waveformBuffer.removeFirst(waveformBuffer.count - maxWaveformSamples)
+        }
+
+        // Throttle UI updates for optimal performance (Shape is very efficient)
+        samplesSinceLastUpdate += 1
+
+        if samplesSinceLastUpdate >= samplesPerUpdate {
+            // Update published samples - SwiftUI Shape will animate smoothly
+            waveformSamples = Array(waveformBuffer)
+
+            // Reset counter
+            samplesSinceLastUpdate = 0
+        }
     }
 
     // MARK: - Audio Session Handling

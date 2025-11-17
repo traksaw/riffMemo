@@ -21,6 +21,15 @@ actor AudioRecordingManager {
     // Callback for real-time audio level updates
     nonisolated(unsafe) var onAudioLevel: (@Sendable (Float) -> Void)?
 
+    // Callback for real-time frequency data updates
+    nonisolated(unsafe) var onFrequencyData: (@Sendable ([Float]) -> Void)?
+
+    // Callback for waveform sample updates (for live waveform visualization)
+    nonisolated(unsafe) var onWaveformSample: (@Sendable (Float) -> Void)?
+
+    // Frequency analyzer
+    private var frequencyAnalyzer: FrequencyAnalyzer?
+
     // MARK: - Public Methods
 
     func startRecording() async throws {
@@ -30,6 +39,9 @@ actor AudioRecordingManager {
 
         // Setup audio session
         try setupAudioSession()
+
+        // Initialize frequency analyzer
+        self.frequencyAnalyzer = FrequencyAnalyzer(bandCount: 32)
 
         // Setup audio engine
         try setupAudioEngine()
@@ -85,6 +97,7 @@ actor AudioRecordingManager {
         self.audioEngine = nil
         self.audioFile = nil
         self.inputNode = nil
+        self.frequencyAnalyzer = nil
 
         return recording
     }
@@ -130,7 +143,7 @@ actor AudioRecordingManager {
         let file = try AVAudioFile(forWriting: audioFileURL, settings: format.settings)
         audioFile = file
 
-        // Install tap to write audio data AND calculate levels
+        // Install tap to write audio data AND calculate levels AND analyze frequencies
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in
             // Write audio to file
             try? file.write(from: buffer)
@@ -138,6 +151,16 @@ actor AudioRecordingManager {
             // Calculate and send audio level
             if let level = self?.calculateLevel(from: buffer) {
                 self?.onAudioLevel?(level)
+                // Also send to waveform (same value, for live waveform bars)
+                if let callback = self?.onWaveformSample {
+                    callback(level)
+                }
+            }
+
+            // Analyze and send frequency data
+            if let analyzer = self?.frequencyAnalyzer {
+                analyzer.analyze(buffer: buffer)
+                self?.onFrequencyData?(analyzer.frequencyMagnitudes)
             }
         }
 

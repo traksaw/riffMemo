@@ -2,7 +2,6 @@
 //  MetronomeManager.swift
 //  RiffMemo
 //
-//  Created by Claude Code on 11/16/25.
 //
 
 import Foundation
