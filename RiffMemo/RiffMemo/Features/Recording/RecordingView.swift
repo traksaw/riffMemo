@@ -2,7 +2,6 @@
 //  RecordingView.swift
 //  RiffMemo
 //
-//  Created by Claude Code on 11/16/25.
 //
 
 import SwiftUI
@@ -19,19 +18,24 @@ struct RecordingView: View {
 
     var body: some View {
         ZStack {
-            VStack(spacing: 40) {
+            VStack(spacing: 32) {
                 Spacer()
 
-                // Duration Display
-                Text(viewModel.currentDuration.formattedDuration())
-                    .font(.system(size: 60, weight: .thin, design: .monospaced))
-                    .foregroundColor(.primary)
-                    .opacity(metronome.preCountRemaining > 0 ? 0 : 1)
+                // Timer with milliseconds
+                RecordingTimerView(
+                    duration: viewModel.currentDuration,
+                    showMilliseconds: true,
+                    isRecording: viewModel.isRecording
+                )
+                .opacity(metronome.preCountRemaining > 0 ? 0 : 1)
 
-            // Audio Level Indicator
-            AudioLevelBar(level: viewModel.audioLevel)
-                .frame(height: 8)
-                .padding(.horizontal, 40)
+                // Live Waveform (Apple Voice Memos style)
+                LiveWaveformView(
+                    samples: viewModel.waveformSamples,
+                    isRecording: viewModel.isRecording
+                )
+                .frame(height: 120)
+                .padding(.horizontal, 32)
 
             // Visual Beat Indicator (during recording with metronome)
             if viewModel.isRecording && metronomeEnabled && metronome.isPlaying {
@@ -44,41 +48,33 @@ struct RecordingView: View {
                 .padding(.horizontal, 40)
             }
 
-            // Metronome Controls
-            VStack(spacing: 16) {
+            // Metronome Controls (collapsed when not in use)
+            VStack(spacing: 12) {
                 // Enable/Disable Toggle
                 Toggle(isOn: $metronomeEnabled) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 6) {
                         Image(systemName: "metronome")
+                            .font(.callout)
                         Text("Click Track")
+                            .font(.subheadline)
                     }
-                    .font(.headline)
                 }
                 .tint(.blue)
-                .padding(.horizontal, 40)
+                .padding(.horizontal, 32)
                 .onChange(of: metronomeEnabled) { oldValue, newValue in
-                    // Stop metronome if toggled off while playing
                     if !newValue && metronome.isPlaying {
                         metronome.stop()
                     }
                 }
 
                 if metronomeEnabled {
-                    // BPM Control
-                    VStack(spacing: 8) {
-                        HStack(spacing: 8) {
-                            Text("\(Int(metronome.bpm))")
-                                .font(.system(size: 32, weight: .bold, design: .rounded))
-                                .monospacedDigit()
-                            Text("BPM")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
+                    VStack(spacing: 10) {
+                        // BPM Control
                         HStack(spacing: 12) {
-                            Image(systemName: "tortoise.fill")
-                                .foregroundStyle(.blue)
-                                .font(.caption)
+                            Text("\(Int(metronome.bpm))")
+                                .font(.system(size: 24, weight: .medium, design: .rounded))
+                                .monospacedDigit()
+                                .frame(width: 60)
 
                             Slider(
                                 value: Binding(
@@ -90,103 +86,111 @@ struct RecordingView: View {
                             )
                             .tint(.blue)
 
-                            Image(systemName: "hare.fill")
-                                .foregroundStyle(.blue)
+                            Text("BPM")
                                 .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 40)
                         }
-                        .padding(.horizontal, 40)
-                    }
+                        .padding(.horizontal, 32)
 
-                    // Volume Control
-                    HStack(spacing: 12) {
-                        Image(systemName: "speaker.wave.1.fill")
-                            .foregroundStyle(.blue)
-                            .font(.caption)
+                        // Compact controls row
+                        HStack(spacing: 20) {
+                            // Volume
+                            HStack(spacing: 8) {
+                                Image(systemName: "speaker.wave.2")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Slider(
+                                    value: Binding(
+                                        get: { metronome.volume },
+                                        set: { metronome.setVolume($0) }
+                                    ),
+                                    in: 0...1
+                                )
+                                .tint(.blue)
+                            }
 
-                        Slider(
-                            value: Binding(
-                                get: { metronome.volume },
-                                set: { metronome.setVolume($0) }
-                            ),
-                            in: 0...1
-                        )
-                        .tint(.blue)
-
-                        Image(systemName: "speaker.wave.3.fill")
-                            .foregroundStyle(.blue)
-                            .font(.caption)
-                    }
-                    .padding(.horizontal, 40)
-
-                    // Time Signature
-                    Picker("Time Signature", selection: Binding(
-                        get: { metronome.timeSignature },
-                        set: { metronome.setTimeSignature($0) }
-                    )) {
-                        ForEach(SharedMetronomeService.TimeSignature.allCases, id: \.self) { signature in
-                            Text(signature.rawValue).tag(signature)
+                            // Time Signature
+                            Picker("", selection: Binding(
+                                get: { metronome.timeSignature },
+                                set: { metronome.setTimeSignature($0) }
+                            )) {
+                                ForEach(SharedMetronomeService.TimeSignature.allCases, id: \.self) { signature in
+                                    Text(signature.rawValue).tag(signature)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(maxWidth: 180)
                         }
+                        .padding(.horizontal, 32)
                     }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal, 40)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
-            .padding(.vertical, 16)
-            .background(Color(.systemGray6).opacity(0.5))
-            .cornerRadius(12)
+            .padding(.vertical, 12)
+            .background(metronomeEnabled ? Color(.systemGray6).opacity(0.3) : Color.clear)
+            .cornerRadius(8)
             .padding(.horizontal, 20)
 
             Spacer()
 
             // Record Button
-            Button(action: {
-                toggleRecording()
-            }) {
-                ZStack {
-                    Circle()
-                        .fill(viewModel.isRecording ? Color.red : Color.blue)
-                        .frame(width: 120, height: 120)
-                        .shadow(color: viewModel.isRecording ? .red.opacity(0.4) : .blue.opacity(0.4), radius: 20)
-
-                    if viewModel.isRecording {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.white)
-                            .frame(width: 40, height: 40)
-                    } else {
+            VStack(spacing: 16) {
+                Button(action: {
+                    toggleRecording()
+                }) {
+                    ZStack {
                         Circle()
-                            .fill(Color.white)
-                            .frame(width: 40, height: 40)
+                            .fill(viewModel.isRecording ? Color.red : Color.blue)
+                            .frame(width: 100, height: 100)
+                            .shadow(color: viewModel.isRecording ? .red.opacity(0.3) : .blue.opacity(0.3), radius: 12)
+
+                        if viewModel.isRecording {
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color.white)
+                                .frame(width: 32, height: 32)
+                        } else {
+                            Circle()
+                                .fill(Color.white)
+                                .frame(width: 32, height: 32)
+                        }
                     }
                 }
+                .buttonStyle(.plain)
+
+                // Status Text
+                Text(viewModel.isRecording ? "Recording..." : "Tap to Record")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
             }
-            .buttonStyle(.plain)
 
-            // Status Text
-            Text(viewModel.isRecording ? "Recording..." : "Tap to Record")
-                .font(.headline)
-                .foregroundColor(.secondary)
-
-                Spacer()
+            Spacer()
             }
             .padding()
             .background(Color(.systemBackground))
 
             // Pre-count Countdown Overlay
             if metronome.state == .preCount {
+                // Calculate which beat we're on (1, 2, 3, 4)
+                // preCountDisplayNumber counts down, we map to beat numbers
+                let beatsInMeasure = metronome.timeSignature.beatsPerMeasure
+                let currentBeat = beatsInMeasure - metronome.preCountDisplayNumber + 1
+                let isFinalBeat = currentBeat == beatsInMeasure
+
                 VStack {
                     Spacer()
 
-                    Text("\(metronome.preCountDisplayNumber)")
+                    // Show actual beat number (1, 2, 3, 4)
+                    Text("\(currentBeat)")
                         .font(.system(size: 120, weight: .bold, design: .rounded))
-                        .foregroundColor(metronome.preCountDisplayNumber == metronome.timeSignature.beatsPerMeasure ? .green : .blue)
+                        .foregroundColor(isFinalBeat ? .red : .blue)
                         .transition(.scale.combined(with: .opacity))
                         .id("countdown-\(metronome.preCountDisplayNumber)")
 
-                    // Show which beat is accented (downbeat = first beat of measure)
-                    Text(metronome.preCountDisplayNumber == metronome.timeSignature.beatsPerMeasure ? "DOWNBEAT" : "beat \(metronome.timeSignature.beatsPerMeasure - metronome.preCountDisplayNumber + 1)")
-                        .font(.title)
+                    Text(isFinalBeat ? "Recording starts next!" : "Count In")
+                        .font(.title2)
                         .fontWeight(.bold)
-                        .foregroundColor(metronome.preCountDisplayNumber == metronome.timeSignature.beatsPerMeasure ? .green : .blue.opacity(0.6))
+                        .foregroundColor(isFinalBeat ? .red : .blue.opacity(0.6))
                         .padding(.top, 8)
 
                     Text("Get Ready")
@@ -225,53 +229,76 @@ struct RecordingView: View {
         } else {
             // Start recording
             if metronomeEnabled {
-                // IMPORTANT: Disable visual-only mode for recording
-                // You need to HEAR the click track during recording!
                 if metronome.visualOnlyMode {
                     Logger.info("Auto-disabling visual-only mode for recording click track", category: Logger.audio)
                     metronome.setVisualOnlyMode(false)
                 }
 
-                // Set metronome settings in viewModel
                 viewModel.recordingBPM = Int(metronome.bpm)
                 viewModel.recordingTimeSignature = metronome.timeSignature.rawValue
 
-                // Start metronome with pre-count, then start recording when pre-count completes
                 metronome.startWithPreCount {
-                    // Start actual recording after pre-count
                     self.viewModel.startRecording()
                 }
             } else {
-                // No metronome, start recording immediately
                 viewModel.toggleRecording()
             }
         }
     }
+
+    /// Converts frequency magnitudes to waveform amplitudes
+    private func convertFrequenciesToWaveform() -> [Float] {
+        let magnitudes = viewModel.frequencyMagnitudes
+        guard !magnitudes.isEmpty else { return [] }
+
+        let waveformSampleCount = 100
+        let stride = max(1, magnitudes.count / waveformSampleCount)
+
+        var waveform: [Float] = []
+        for i in Swift.stride(from: 0, to: magnitudes.count, by: stride) {
+            if i < magnitudes.count {
+                waveform.append(magnitudes[i])
+            }
+        }
+
+        while waveform.count < waveformSampleCount {
+            waveform.append(0)
+        }
+        if waveform.count > waveformSampleCount {
+            waveform = Array(waveform.prefix(waveformSampleCount))
+        }
+
+        return waveform
+    }
+
+    /// Returns color for frequency band
+    private func colorForBand(at index: Int) -> BandColor {
+        let bandPosition = Float(index) / Float(viewModel.frequencyMagnitudes.count - 1)
+        let minFreq: Float = 20.0
+        let maxFreq: Float = 20000.0
+        let frequency = minFreq * pow(maxFreq / minFreq, bandPosition)
+
+        if frequency < 250 { return .bass }
+        else if frequency < 500 { return .lowMid }
+        else if frequency < 2000 { return .mid }
+        else if frequency < 6000 { return .highMid }
+        else { return .high }
+    }
 }
 
-// MARK: - Audio Level Bar
+// MARK: - Legend Item
 
-struct AudioLevelBar: View {
-    let level: Float
+struct LegendItem: View {
+    let color: Color
+    let label: String
 
     var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .leading) {
-                // Background
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.gray.opacity(0.2))
-
-                // Level
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(
-                        LinearGradient(
-                            colors: [.green, .yellow, .red],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .frame(width: geometry.size.width * CGFloat(level))
-            }
+        HStack(spacing: 4) {
+            Circle()
+                .fill(color)
+                .frame(width: 8, height: 8)
+            Text(label)
+                .foregroundColor(.secondary)
         }
     }
 }

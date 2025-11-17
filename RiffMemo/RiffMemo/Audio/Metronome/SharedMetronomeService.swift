@@ -206,11 +206,10 @@ class SharedMetronomeService: ObservableObject {
 
             isPlaying = true
             currentBeat = 0
-            nextBeatTime = Date().timeIntervalSince1970  // Initialize to current time
             subdivisionCounter = 0
             // Pre-count matches time signature (4 beats for 4/4, 6 beats for 6/8, etc.)
             preCountRemaining = timeSignature.beatsPerMeasure
-            preCountDisplayNumber = 0 // Will be set on first beat
+            preCountDisplayNumber = timeSignature.beatsPerMeasure // Initialize to show beat 1 immediately
             preCountCompletionHandler = completion
             state = .preCount  // Pre-count mode
 
@@ -219,8 +218,12 @@ class SharedMetronomeService: ObservableObject {
             startSampleTime = 0
             isFirstBeatScheduled = false
 
+            // Set next beat time with a small delay to give SwiftUI time to render beat 1
+            // This ensures the user sees "1" before the first click plays
+            nextBeatTime = Date().timeIntervalSince1970 + 0.05  // 50ms delay for UI rendering
+
             startTimer()
-            playBeat()
+            // Don't call playBeat() manually - let the timer handle all beats consistently
 
             Logger.info("Shared metronome started with \(timeSignature.beatsPerMeasure)-beat pre-count at \(bpm) BPM - Using sample-accurate timing", category: Logger.audio)
         } catch {
