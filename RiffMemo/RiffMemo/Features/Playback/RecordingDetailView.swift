@@ -121,6 +121,11 @@ struct RecordingDetailView: View {
             .padding()
         }
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                QuickShareButton(recording: recording)
+            }
+        }
         .task {
             await waveformViewModel.loadWaveform()
         }

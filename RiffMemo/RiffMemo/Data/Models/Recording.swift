@@ -17,9 +17,15 @@ final class Recording {
     var duration: TimeInterval
 
     // Audio metadata
-    var audioFileURL: URL
+    var audioFilename: String  // Store filename only, not full path
     var fileSize: Int64
     var sampleRate: Double
+
+    // Computed property to get the full URL
+    var audioFileURL: URL {
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        return documentsPath.appendingPathComponent(audioFilename)
+    }
 
     // Detected properties
     var detectedBPM: Int?
@@ -48,7 +54,7 @@ final class Recording {
         createdDate: Date = Date(),
         modifiedDate: Date = Date(),
         duration: TimeInterval,
-        audioFileURL: URL,
+        audioFileURL: URL,  // Accept URL but store only filename
         fileSize: Int64 = 0,
         sampleRate: Double = 44100.0,
         detectedBPM: Int? = nil,
@@ -70,7 +76,7 @@ final class Recording {
         self.createdDate = createdDate
         self.modifiedDate = modifiedDate
         self.duration = duration
-        self.audioFileURL = audioFileURL
+        self.audioFilename = audioFileURL.lastPathComponent  // Store only filename
         self.fileSize = fileSize
         self.sampleRate = sampleRate
         self.detectedBPM = detectedBPM

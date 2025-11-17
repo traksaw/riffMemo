@@ -10,9 +10,21 @@ import SwiftData
 
 struct LibraryView: View {
     @State private var viewModel: LibraryViewModel
+    @State private var editMode: EditMode = .inactive
+    @State private var selectedRecordings: Set<Recording.ID> = []
+    @State private var showingBatchExport = false
 
     init(viewModel: LibraryViewModel) {
         self.viewModel = viewModel
+    }
+
+    private var isSelectionMode: Bool {
+        editMode == .active
+    }
+
+    // Check if all recordings are selected
+    private var allSelected: Bool {
+        !viewModel.recordings.isEmpty && selectedRecordings.count == viewModel.recordings.count
     }
 
     var body: some View {
@@ -27,39 +39,65 @@ struct LibraryView: View {
                     )
                 } else {
                     // Recordings List
-                    List {
+                    List(selection: $selectedRecordings) {
                         ForEach(viewModel.recordings) { recording in
-                            NavigationLink {
-                                RecordingDetailView(
-                                    recording: recording,
-                                    viewModel: RecordingDetailViewModel(
-                                        recording: recording,
-                                        audioPlayer: AudioPlaybackManager()
-                                    )
-                                )
-                            } label: {
+                            if isSelectionMode {
+                                // Selection mode - no navigation
                                 RecordingRow(recording: recording)
-                            }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button(role: .destructive) {
-                                    Task {
-                                        await viewModel.deleteRecording(recording)
-                                    }
+                                    .tag(recording.id)
+                            } else {
+                                // Normal mode - with navigation
+                                NavigationLink {
+                                    RecordingDetailView(
+                                        recording: recording,
+                                        viewModel: RecordingDetailViewModel(
+                                            recording: recording,
+                                            audioPlayer: AudioPlaybackManager()
+                                        )
+                                    )
                                 } label: {
-                                    Label("Delete", systemImage: "trash")
+                                    RecordingRow(recording: recording)
+                                }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        Task {
+                                            await viewModel.deleteRecording(recording)
+                                        }
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
+                                .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                    Button {
+                                        Task {
+                                            await ShareManager.shared.shareRecording(recording)
+                                            HapticManager.shared.success()
+                                        }
+                                    } label: {
+                                        Label("Share", systemImage: "square.and.arrow.up")
+                                    }
+                                    .tint(.blue)
                                 }
                             }
                         }
                     }
                     .listStyle(.insetGrouped)
+                    .environment(\.editMode, $editMode)
                 }
             }
             .navigationTitle("Recordings")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    // Analyze all button
-                    if viewModel.unanalyzedCount > 0 {
+                    if isSelectionMode {
+                        // Cancel selection
+                        Button("Cancel") {
+                            editMode = .inactive
+                            selectedRecordings.removeAll()
+                            HapticManager.shared.lightTap()
+                        }
+                    } else if viewModel.unanalyzedCount > 0 {
+                        // Analyze all button
                         Button(action: {
                             viewModel.analyzeAll()
                             HapticManager.shared.lightTap()
@@ -72,33 +110,65 @@ struct LibraryView: View {
 
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 12) {
-                        // Waveform generation indicator
-                        if viewModel.isGeneratingWaveforms {
-                            HStack(spacing: 6) {
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                                Text("\(Int(viewModel.waveformProgress * 100))%")
+                        if isSelectionMode {
+                            // Select All / Deselect All button
+                            Button(action: {
+                                if allSelected {
+                                    // Deselect all
+                                    selectedRecordings.removeAll()
+                                } else {
+                                    // Select all
+                                    selectedRecordings = Set(viewModel.recordings.map { $0.id })
+                                }
+                                HapticManager.shared.lightTap()
+                            }) {
+                                Text(allSelected ? "Deselect All" : "Select All")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                            }
+
+                            // Batch export button
+                            Button(action: {
+                                showingBatchExport = true
+                                HapticManager.shared.mediumTap()
+                            }) {
+                                Label("Export", systemImage: "square.and.arrow.up")
+                                    .fontWeight(.semibold)
+                            }
+                            .disabled(selectedRecordings.isEmpty)
+                        } else {
+                            // Waveform generation indicator
+                            if viewModel.isGeneratingWaveforms {
+                                HStack(spacing: 6) {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                    Text("\(Int(viewModel.waveformProgress * 100))%")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+
+                            // Analysis status
+                            if AudioAnalysisManager.shared.isAnalyzing {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "waveform")
+                                        .font(.caption)
+                                        .foregroundStyle(.blue)
+                                    Text("Analyzing")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+
+                            // Select button (if 2+ recordings)
+                            if viewModel.recordings.count >= 2 {
+                                Button(action: {
+                                    editMode = .active
+                                    HapticManager.shared.lightTap()
+                                }) {
+                                    Image(systemName: "checkmark.circle")
+                                }
                             }
                         }
-
-                        // Analysis status
-                        if AudioAnalysisManager.shared.isAnalyzing {
-                            HStack(spacing: 4) {
-                                Image(systemName: "waveform")
-                                    .font(.caption)
-                                    .foregroundStyle(.blue)
-                                Text("Analyzing")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-
-                        // Recording count
-                        Text("\(viewModel.recordings.count)")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -106,6 +176,16 @@ struct LibraryView: View {
                 await viewModel.loadRecordings()
                 // Preload waveforms for first 10 recordings
                 await viewModel.preloadWaveforms(count: 10)
+            }
+            .sheet(isPresented: $showingBatchExport) {
+                if !selectedRecordings.isEmpty {
+                    let recordings = viewModel.recordings.filter { selectedRecordings.contains($0.id) }
+                    BatchExportView(recordings: recordings)
+                        .onDisappear {
+                            editMode = .inactive
+                            selectedRecordings.removeAll()
+                        }
+                }
             }
         }
     }

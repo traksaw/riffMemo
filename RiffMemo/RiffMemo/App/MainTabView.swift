@@ -38,6 +38,18 @@ struct MainTabView: View {
                 Label("Library", systemImage: "music.note.list")
             }
 
+            // Tuner Tab
+            TunerView()
+                .tabItem {
+                    Label("Tuner", systemImage: "tuningfork")
+                }
+
+            // Metronome Tab
+            MetronomeView()
+                .tabItem {
+                    Label("Metronome", systemImage: "metronome")
+                }
+
             // Settings Tab
             SettingsView()
                 .tabItem {

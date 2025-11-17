@@ -13,6 +13,10 @@ struct SettingsView: View {
     @AppStorage("analyzeKey") private var analyzeKey = true
     @AppStorage("analyzeQuality") private var analyzeQuality = true
 
+    @AppStorage("defaultExportFormat") private var defaultFormat: AudioFormat = .m4a
+    @AppStorage("defaultExportQuality") private var defaultQuality: ExportQuality = .high
+    @AppStorage("includeMetadataByDefault") private var includeMetadata = true
+
     var body: some View {
         NavigationStack {
             Form {
@@ -61,6 +65,27 @@ struct SettingsView: View {
                     .disabled(AudioAnalysisManager.shared.queueCount == 0)
                 } header: {
                     Label("Status", systemImage: "chart.bar")
+                }
+
+                // Export Settings
+                Section {
+                    Picker("Default Format", selection: $defaultFormat) {
+                        ForEach(AudioFormat.allCases, id: \.self) { format in
+                            Text(format.displayName).tag(format)
+                        }
+                    }
+
+                    Picker("Default Quality", selection: $defaultQuality) {
+                        ForEach(ExportQuality.allCases, id: \.self) { quality in
+                            Text(quality.rawValue).tag(quality)
+                        }
+                    }
+
+                    Toggle("Include Metadata", isOn: $includeMetadata)
+                } header: {
+                    Label("Export Defaults", systemImage: "square.and.arrow.up")
+                } footer: {
+                    Text("Default settings for exporting and sharing recordings")
                 }
 
                 // About
