@@ -38,7 +38,7 @@ actor AudioRecordingManager {
         Logger.info("Audio recording started", category: Logger.audio)
     }
 
-    func stopRecording(duration: TimeInterval) async throws -> Recording {
+    func stopRecording(duration: TimeInterval, recordedWithBPM: Int? = nil, recordedWithTimeSignature: String? = nil) async throws -> Recording {
         guard isRecording else {
             throw AudioError.notRecording
         }
@@ -74,7 +74,9 @@ actor AudioRecordingManager {
             title: "New Recording",
             duration: finalDuration,
             audioFileURL: audioFile.url,
-            fileSize: fileSize
+            fileSize: fileSize,
+            recordedWithBPM: recordedWithBPM,
+            recordedWithTimeSignature: recordedWithTimeSignature
         )
 
         Logger.info("Audio recording stopped - Duration: \(finalDuration)s, File size: \(fileSize) bytes", category: Logger.audio)
@@ -91,8 +93,23 @@ actor AudioRecordingManager {
 
     private func setupAudioSession() throws {
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker])
-        try session.setActive(true)
+
+        // Check if audio is currently playing (metronome running)
+        let isAudioPlaying = session.isOtherAudioPlaying || session.secondaryAudioShouldBeSilencedHint
+
+        // Only reconfigure if session is not already compatible
+        // This prevents audio glitches when metronome is already playing
+        if !isAudioPlaying {
+            // No audio playing - safe to reconfigure
+            try session.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker])
+            try session.setActive(true)
+        } else {
+            // Audio is playing - only reconfigure if category is wrong
+            if session.category != .playAndRecord {
+                try session.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker])
+            }
+            // Don't call setActive(true) - it's already active and would cause reconfiguration
+        }
     }
 
     private func setupAudioEngine() throws {

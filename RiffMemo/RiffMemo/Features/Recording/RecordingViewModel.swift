@@ -22,6 +22,10 @@ class RecordingViewModel {
     var audioLevel: Float = 0.0
     var detectedPitch: String?
 
+    // Metronome settings for current recording
+    var recordingBPM: Int?
+    var recordingTimeSignature: String?
+
     // Error handling
     var errorMessage: String?
     var showError: Bool = false
@@ -79,10 +83,19 @@ class RecordingViewModel {
         Task {
             do {
                 let duration = currentDuration
-                let recording = try await audioRecorder.stopRecording(duration: duration)
+                let recording = try await audioRecorder.stopRecording(
+                    duration: duration,
+                    recordedWithBPM: recordingBPM,
+                    recordedWithTimeSignature: recordingTimeSignature
+                )
                 isRecording = false
                 currentDuration = 0
                 audioLevel = 0 // Reset audio level
+
+                // Reset metronome settings for next recording
+                recordingBPM = nil
+                recordingTimeSignature = nil
+
                 try await repository.save(recording)
                 Logger.info("Recording stopped and saved with duration: \(duration)s", category: Logger.audio)
 

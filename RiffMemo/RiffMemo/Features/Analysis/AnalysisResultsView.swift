@@ -13,25 +13,68 @@ struct AnalysisResultsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            // Recorded with metronome settings
+            if recording.recordedWithBPM != nil || recording.recordedWithTimeSignature != nil {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Recorded With")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+
+                    HStack(spacing: 12) {
+                        if let bpm = recording.recordedWithBPM {
+                            HStack(spacing: 6) {
+                                Image(systemName: "metronome.fill")
+                                    .foregroundStyle(.green)
+                                Text("\(bpm) BPM")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                            }
+                        }
+
+                        if let timeSig = recording.recordedWithTimeSignature {
+                            HStack(spacing: 6) {
+                                Image(systemName: "music.note.list")
+                                    .foregroundStyle(.green)
+                                Text(timeSig)
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                            }
+                        }
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.green.opacity(0.1))
+                    .cornerRadius(12)
+                }
+            }
+
             // BPM and Key
             if recording.detectedBPM != nil || recording.detectedKey != nil {
-                HStack(spacing: 20) {
-                    if let bpm = recording.detectedBPM {
-                        AnalysisMetricCard(
-                            icon: "metronome",
-                            label: "Tempo",
-                            value: "\(bpm) BPM",
-                            color: .blue
-                        )
-                    }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Detected")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
 
-                    if let key = recording.detectedKey {
-                        AnalysisMetricCard(
-                            icon: "music.note",
-                            label: "Key",
-                            value: key,
-                            color: .purple
-                        )
+                    HStack(spacing: 20) {
+                        if let bpm = recording.detectedBPM {
+                            AnalysisMetricCard(
+                                icon: "metronome",
+                                label: "Tempo",
+                                value: "\(bpm) BPM",
+                                color: .blue
+                            )
+                        }
+
+                        if let key = recording.detectedKey {
+                            AnalysisMetricCard(
+                                icon: "music.note",
+                                label: "Key",
+                                value: key,
+                                color: .purple
+                            )
+                        }
                     }
                 }
             }

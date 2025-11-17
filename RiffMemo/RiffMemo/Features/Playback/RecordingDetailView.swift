@@ -106,7 +106,8 @@ struct RecordingDetailView: View {
             .buttonStyle(.plain)
 
             // Analysis Results
-            if recording.detectedBPM != nil || recording.detectedKey != nil || recording.audioQuality != nil {
+            if recording.recordedWithBPM != nil || recording.recordedWithTimeSignature != nil ||
+               recording.detectedBPM != nil || recording.detectedKey != nil || recording.audioQuality != nil {
                 AnalysisResultsView(recording: recording)
                     .padding(.horizontal)
             } else {
