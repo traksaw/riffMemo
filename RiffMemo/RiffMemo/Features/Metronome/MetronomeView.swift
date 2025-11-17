@@ -21,8 +21,10 @@ struct MetronomeView: View {
                 )
                 .ignoresSafeArea()
 
-                VStack(spacing: 40) {
-                    Spacer()
+                ScrollView {
+                    VStack(spacing: 40) {
+                        Spacer()
+                            .frame(height: 20)
 
                     // Visual Beat Indicator
                     BeatIndicator(
@@ -216,6 +218,164 @@ struct MetronomeView: View {
                         .padding(.horizontal, 40)
                     }
 
+                    Divider()
+                        .padding(.vertical, 8)
+
+                    // MARK: - Advanced Features
+
+                    // Subdivision Selector
+                    VStack(spacing: 12) {
+                        Text("Subdivisions")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+
+                        Picker("Subdivisions", selection: Binding(
+                            get: { metronome.subdivision },
+                            set: { metronome.setSubdivision($0) }
+                        )) {
+                            ForEach(SharedMetronomeService.Subdivision.allCases, id: \.self) { subdivision in
+                                Text(subdivision.displayName).tag(subdivision)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .padding(.horizontal, 40)
+                    }
+
+                    // Click Sound Selector
+                    VStack(spacing: 12) {
+                        Text("Click Sound")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+
+                        Picker("Click Sound", selection: Binding(
+                            get: { metronome.clickSound },
+                            set: { metronome.setClickSound($0) }
+                        )) {
+                            ForEach(SharedMetronomeService.ClickSound.allCases, id: \.self) { sound in
+                                Text(sound.displayName).tag(sound)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .padding(.horizontal, 40)
+                    }
+
+                    // Visual-Only Mode Toggle
+                    Toggle(isOn: Binding(
+                        get: { metronome.visualOnlyMode },
+                        set: { metronome.setVisualOnlyMode($0) }
+                    )) {
+                        HStack(spacing: 8) {
+                            Image(systemName: metronome.visualOnlyMode ? "eye.fill" : "speaker.wave.2.fill")
+                            Text("Visual Only")
+                        }
+                        .font(.subheadline)
+                    }
+                    .tint(.purple)
+                    .padding(.horizontal, 40)
+
+                    // Tempo Ramp Section
+                    VStack(spacing: 12) {
+                        Toggle(isOn: Binding(
+                            get: { metronome.tempoRampEnabled },
+                            set: { metronome.setTempoRampEnabled($0) }
+                        )) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "chart.line.uptrend.xyaxis")
+                                Text("Tempo Ramp")
+                            }
+                            .font(.subheadline)
+                        }
+                        .tint(.purple)
+                        .padding(.horizontal, 40)
+
+                        if metronome.tempoRampEnabled {
+                            VStack(spacing: 16) {
+                                // Start BPM
+                                HStack {
+                                    Text("Start:")
+                                        .font(.caption)
+                                        .frame(width: 50, alignment: .leading)
+                                    Text("\(Int(metronome.tempoRampStartBPM))")
+                                        .font(.caption)
+                                        .monospacedDigit()
+                                        .frame(width: 40)
+                                    Slider(
+                                        value: Binding(
+                                            get: { metronome.tempoRampStartBPM },
+                                            set: { newValue in
+                                                metronome.setTempoRampSettings(
+                                                    startBPM: newValue,
+                                                    targetBPM: metronome.tempoRampTargetBPM,
+                                                    duration: metronome.tempoRampDuration
+                                                )
+                                            }
+                                        ),
+                                        in: 30...300,
+                                        step: 5
+                                    )
+                                    .tint(.purple)
+                                }
+
+                                // Target BPM
+                                HStack {
+                                    Text("Target:")
+                                        .font(.caption)
+                                        .frame(width: 50, alignment: .leading)
+                                    Text("\(Int(metronome.tempoRampTargetBPM))")
+                                        .font(.caption)
+                                        .monospacedDigit()
+                                        .frame(width: 40)
+                                    Slider(
+                                        value: Binding(
+                                            get: { metronome.tempoRampTargetBPM },
+                                            set: { newValue in
+                                                metronome.setTempoRampSettings(
+                                                    startBPM: metronome.tempoRampStartBPM,
+                                                    targetBPM: newValue,
+                                                    duration: metronome.tempoRampDuration
+                                                )
+                                            }
+                                        ),
+                                        in: 30...300,
+                                        step: 5
+                                    )
+                                    .tint(.purple)
+                                }
+
+                                // Duration
+                                HStack {
+                                    Text("Duration:")
+                                        .font(.caption)
+                                        .frame(width: 50, alignment: .leading)
+                                    Text("\(Int(metronome.tempoRampDuration))s")
+                                        .font(.caption)
+                                        .monospacedDigit()
+                                        .frame(width: 40)
+                                    Slider(
+                                        value: Binding(
+                                            get: { metronome.tempoRampDuration },
+                                            set: { newValue in
+                                                metronome.setTempoRampSettings(
+                                                    startBPM: metronome.tempoRampStartBPM,
+                                                    targetBPM: metronome.tempoRampTargetBPM,
+                                                    duration: newValue
+                                                )
+                                            }
+                                        ),
+                                        in: 10...300,
+                                        step: 10
+                                    )
+                                    .tint(.purple)
+                                }
+                            }
+                            .padding(.horizontal, 40)
+                            .padding(.vertical, 8)
+                            .background(Color.purple.opacity(0.05))
+                            .cornerRadius(8)
+                            .padding(.horizontal, 40)
+                        }
+                    }
+
                     Spacer()
 
                     // Start/Stop Button
@@ -245,6 +405,7 @@ struct MetronomeView: View {
 
                     Spacer()
                         .frame(height: 40)
+                    }
                 }
             }
             .navigationTitle("Metronome")
@@ -253,6 +414,15 @@ struct MetronomeView: View {
         .onDisappear {
             if metronome.isPlaying {
                 metronome.stop()
+            }
+        }
+        .alert("Metronome Error", isPresented: $metronome.showError) {
+            Button("OK") {
+                metronome.showError = false
+            }
+        } message: {
+            if let message = metronome.errorMessage {
+                Text(message)
             }
         }
     }

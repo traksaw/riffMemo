@@ -13,6 +13,8 @@ struct LibraryView: View {
     @State private var editMode: EditMode = .inactive
     @State private var selectedRecordings: Set<Recording.ID> = []
     @State private var showingBatchExport = false
+    @State private var showingDeleteAllConfirmation = false
+    @State private var showingDeleteSelectedConfirmation = false
 
     init(viewModel: LibraryViewModel) {
         self.viewModel = viewModel
@@ -126,6 +128,16 @@ struct LibraryView: View {
                                     .font(.caption)
                             }
 
+                            // Delete selected button
+                            Button(role: .destructive, action: {
+                                showingDeleteSelectedConfirmation = true
+                                HapticManager.shared.warning()
+                            }) {
+                                Label("Delete", systemImage: "trash")
+                                    .fontWeight(.semibold)
+                            }
+                            .disabled(selectedRecordings.isEmpty)
+
                             // Batch export button
                             Button(action: {
                                 showingBatchExport = true
@@ -159,13 +171,28 @@ struct LibraryView: View {
                                 }
                             }
 
-                            // Select button (if 2+ recordings)
-                            if viewModel.recordings.count >= 2 {
-                                Button(action: {
-                                    editMode = .active
-                                    HapticManager.shared.lightTap()
-                                }) {
-                                    Image(systemName: "checkmark.circle")
+                            // More options menu
+                            if !viewModel.recordings.isEmpty {
+                                Menu {
+                                    // Select button (if 2+ recordings)
+                                    if viewModel.recordings.count >= 2 {
+                                        Button(action: {
+                                            editMode = .active
+                                            HapticManager.shared.lightTap()
+                                        }) {
+                                            Label("Select", systemImage: "checkmark.circle")
+                                        }
+                                    }
+
+                                    // Delete All button
+                                    Button(role: .destructive, action: {
+                                        showingDeleteAllConfirmation = true
+                                        HapticManager.shared.warning()
+                                    }) {
+                                        Label("Delete All", systemImage: "trash")
+                                    }
+                                } label: {
+                                    Image(systemName: "ellipsis.circle")
                                 }
                             }
                         }
@@ -187,7 +214,54 @@ struct LibraryView: View {
                         }
                 }
             }
+            .alert("Delete All Recordings?", isPresented: $showingDeleteAllConfirmation) {
+                Button("Cancel", role: .cancel) {
+                    showingDeleteAllConfirmation = false
+                }
+                Button("Delete All", role: .destructive) {
+                    Task {
+                        await viewModel.deleteAllRecordings()
+                        HapticManager.shared.success()
+                    }
+                }
+            } message: {
+                Text("This will permanently delete all \(viewModel.recordings.count) recordings. This action cannot be undone.")
+            }
+            .alert("Delete Selected Recordings?", isPresented: $showingDeleteSelectedConfirmation) {
+                Button("Cancel", role: .cancel) {
+                    showingDeleteSelectedConfirmation = false
+                }
+                Button("Delete \(selectedRecordings.count)", role: .destructive) {
+                    Task {
+                        await deleteSelectedRecordings()
+                        HapticManager.shared.success()
+                        editMode = .inactive
+                        selectedRecordings.removeAll()
+                    }
+                }
+            } message: {
+                Text("This will permanently delete \(selectedRecordings.count) selected recording\(selectedRecordings.count == 1 ? "" : "s"). This action cannot be undone.")
+            }
         }
+    }
+
+    // MARK: - Helper Methods
+
+    private func deleteSelectedRecordings() async {
+        let recordingsToDelete = viewModel.recordings.filter { selectedRecordings.contains($0.id) }
+
+        Logger.info("Deleting \(recordingsToDelete.count) selected recordings", category: Logger.data)
+
+        for recording in recordingsToDelete {
+            do {
+                try await viewModel.repository.delete(recording)
+            } catch {
+                Logger.error("Failed to delete recording \(recording.title): \(error)", category: Logger.data)
+            }
+        }
+
+        await viewModel.loadRecordings()
+        Logger.info("Deleted selected recordings", category: Logger.data)
     }
 }
 

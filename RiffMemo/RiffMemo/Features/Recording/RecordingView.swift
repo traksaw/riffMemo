@@ -65,35 +65,36 @@ struct RecordingView: View {
 
                 if metronomeEnabled {
                     // BPM Control
-                    HStack(spacing: 16) {
-                        Button(action: {
-                            metronome.incrementBPM(-10)
-                        }) {
-                            Image(systemName: "minus.circle.fill")
-                                .font(.title2)
-                                .foregroundColor(.blue)
-                        }
-                        .buttonStyle(.plain)
-
-                        VStack(spacing: 4) {
+                    VStack(spacing: 8) {
+                        HStack(spacing: 8) {
                             Text("\(Int(metronome.bpm))")
                                 .font(.system(size: 32, weight: .bold, design: .rounded))
                                 .monospacedDigit()
-
                             Text("BPM")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                        .frame(width: 100)
 
-                        Button(action: {
-                            metronome.incrementBPM(10)
-                        }) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.title2)
-                                .foregroundColor(.blue)
+                        HStack(spacing: 12) {
+                            Image(systemName: "tortoise.fill")
+                                .foregroundStyle(.blue)
+                                .font(.caption)
+
+                            Slider(
+                                value: Binding(
+                                    get: { metronome.bpm },
+                                    set: { metronome.setBPM($0) }
+                                ),
+                                in: 30...300,
+                                step: 1
+                            )
+                            .tint(.blue)
+
+                            Image(systemName: "hare.fill")
+                                .foregroundStyle(.blue)
+                                .font(.caption)
                         }
-                        .buttonStyle(.plain)
+                        .padding(.horizontal, 40)
                     }
 
                     // Volume Control
@@ -171,7 +172,7 @@ struct RecordingView: View {
             .background(Color(.systemBackground))
 
             // Pre-count Countdown Overlay
-            if metronome.preCountRemaining > 0 {
+            if metronome.state == .preCount {
                 VStack {
                     Spacer()
 
@@ -224,6 +225,13 @@ struct RecordingView: View {
         } else {
             // Start recording
             if metronomeEnabled {
+                // IMPORTANT: Disable visual-only mode for recording
+                // You need to HEAR the click track during recording!
+                if metronome.visualOnlyMode {
+                    Logger.info("Auto-disabling visual-only mode for recording click track", category: Logger.audio)
+                    metronome.setVisualOnlyMode(false)
+                }
+
                 // Set metronome settings in viewModel
                 viewModel.recordingBPM = Int(metronome.bpm)
                 viewModel.recordingTimeSignature = metronome.timeSignature.rawValue
