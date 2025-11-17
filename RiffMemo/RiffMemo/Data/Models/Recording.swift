@@ -27,6 +27,10 @@ final class Recording {
         return documentsPath.appendingPathComponent(audioFilename)
     }
 
+    // Recording settings (metronome used during recording)
+    var recordedWithBPM: Int?
+    var recordedWithTimeSignature: String?
+
     // Detected properties
     var detectedBPM: Int?
     var detectedKey: String?
@@ -57,6 +61,8 @@ final class Recording {
         audioFileURL: URL,  // Accept URL but store only filename
         fileSize: Int64 = 0,
         sampleRate: Double = 44100.0,
+        recordedWithBPM: Int? = nil,
+        recordedWithTimeSignature: String? = nil,
         detectedBPM: Int? = nil,
         detectedKey: String? = nil,
         detectedInstrument: String? = nil,
@@ -79,6 +85,8 @@ final class Recording {
         self.audioFilename = audioFileURL.lastPathComponent  // Store only filename
         self.fileSize = fileSize
         self.sampleRate = sampleRate
+        self.recordedWithBPM = recordedWithBPM
+        self.recordedWithTimeSignature = recordedWithTimeSignature
         self.detectedBPM = detectedBPM
         self.detectedKey = detectedKey
         self.detectedInstrument = detectedInstrument

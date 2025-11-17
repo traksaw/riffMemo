@@ -23,7 +23,7 @@ class LibraryViewModel {
 
     // MARK: - Dependencies
 
-    private let repository: RecordingRepository
+    let repository: RecordingRepository
     private let waveformGenerator = WaveformGenerator()
 
     // MARK: - Initialization
@@ -53,6 +53,24 @@ class LibraryViewModel {
         } catch {
             Logger.error("Failed to delete recording: \(error)", category: Logger.data)
         }
+    }
+
+    func deleteAllRecordings() async {
+        let count = recordings.count
+        guard count > 0 else { return }
+
+        Logger.info("Deleting all \(count) recordings", category: Logger.data)
+
+        for recording in recordings {
+            do {
+                try await repository.delete(recording)
+            } catch {
+                Logger.error("Failed to delete recording \(recording.title): \(error)", category: Logger.data)
+            }
+        }
+
+        await loadRecordings()
+        Logger.info("Deleted all recordings", category: Logger.data)
     }
 
     func toggleFavorite(_ recording: Recording) async {
