@@ -1,4 +1,6 @@
-# Music Memos Rebuild
+# riffMemo
+
+<img width="1100" height="398" alt="image" src="https://github.com/user-attachments/assets/93f12627-0a02-4238-a7e7-823a8c5b7c8e" />
 
 A modern iOS app that replicates and enhances the core experience of Apple's discontinued Music Memos app. Built for musicians who need to quickly capture, organize, and develop musical ideas.
 
