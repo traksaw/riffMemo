@@ -107,7 +107,7 @@ This is currently a solo project. Contribution guidelines will be added once the
 
 ## License
 
-TBD
+MIT License. See [LICENSE](LICENSE) for details.
 
 ## Acknowledgments
 
@@ -115,6 +115,5 @@ Inspired by Apple's Music Memos (2016-2021)
 
 ---
 
-**Status**: 🚧 In Development - Project Setup Phase
+**Status**: 🚧 In active development
 **Started**: November 2024
-**Target Launch**: Q2 2025
