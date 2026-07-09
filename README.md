@@ -3,8 +3,6 @@
 [![iOS Build](https://github.com/traksaw/riffMemo/actions/workflows/ios-build.yml/badge.svg)](https://github.com/traksaw/riffMemo/actions/workflows/ios-build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-<img width="1100" height="398" alt="RiffMemo app preview" src="https://github.com/user-attachments/assets/93f12627-0a02-4238-a7e7-823a8c5b7c8e" />
-
 A native iOS app for musicians to capture, analyze, and organize musical ideas — inspired by Apple's discontinued Music Memos. Built with SwiftUI and AVFoundation, with an on-device audio analysis pipeline for tempo, key, and pitch detection.
 
 ## Features
