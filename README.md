@@ -1,109 +1,105 @@
-# riffMemo
+# RiffMemo
 
-<img width="1100" height="398" alt="image" src="https://github.com/user-attachments/assets/93f12627-0a02-4238-a7e7-823a8c5b7c8e" />
+[![iOS Build](https://github.com/traksaw/riffMemo/actions/workflows/ios-build.yml/badge.svg)](https://github.com/traksaw/riffMemo/actions/workflows/ios-build.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A modern iOS app that replicates and enhances the core experience of Apple's discontinued Music Memos app. Built for musicians who need to quickly capture, organize, and develop musical ideas.
+<img width="1100" height="398" alt="RiffMemo app preview" src="https://github.com/user-attachments/assets/93f12627-0a02-4238-a7e7-823a8c5b7c8e" />
 
-## Overview
+A native iOS app for musicians to capture, analyze, and organize musical ideas — inspired by Apple's discontinued Music Memos. Built with SwiftUI and AVFoundation, with an on-device audio analysis pipeline for tempo, key, and pitch detection.
 
-This app provides a friction-free way for musicians to:
-- Record musical ideas with one tap
-- Automatically detect tempo and key
-- Organize recordings with tags and search
-- Share and export to other music apps
-- Sync across devices via iCloud
+## Features
+
+- **One-tap recording** with a live waveform and frequency spectrum view
+- **On-device audio analysis** — BPM detection, key detection, pitch detection, and recording quality scoring
+- **Built-in metronome and tuner**
+- **Library management** — search, organize, and review past recordings with waveform thumbnails
+- **Export** — single and batch export with configurable options
+- **iCloud sync** via SwiftData + CloudKit
+
+## Screenshots
+
+| Recording | Library | Tuner | Metronome |
+|:---:|:---:|:---:|:---:|
+| <img src="Screenshots/recording-active.png" width="200" alt="Recording a riff with live waveform"> | <img src="Screenshots/library.png" width="200" alt="Library with BPM and key detected per recording"> | <img src="Screenshots/tuner.png" width="200" alt="Chromatic tuner"> | <img src="Screenshots/metronome.png" width="200" alt="Metronome with tap tempo"> |
+
+## Engineering Highlights
+
+- **Custom on-device DSP** — BPM, key, and pitch detection are implemented from scratch (`Audio/Analysis/`) rather than pulled from a third-party library, running entirely on-device with no network round-trip.
+- **Testable audio layer** — recording, playback, and analysis live behind manager/repository interfaces, so view models are unit-tested with `XCTest` without touching AVFoundation or a simulator's microphone.
+- **Clear separation of concerns** — MVVM + Coordinator throughout: views own presentation, `@Observable` view models own state, coordinators own navigation. No feature reaches into another feature's internals.
+- **CI on every change** — GitHub Actions builds and runs the test suite on every push and pull request against `main`, catching regressions before merge.
 
 ## Tech Stack
 
-- **Platform**: iOS 17+ (native Swift)
-- **UI Framework**: SwiftUI
-- **Architecture**: MVVM + Coordinator Pattern
-- **Audio Engine**: AVFoundation + Core Audio
-- **Storage**: SwiftData + CloudKit
-- **Package Manager**: Swift Package Manager
+- **Platform**: iOS (Swift, SwiftUI)
+- **Architecture**: MVVM + Coordinator pattern
+- **Audio**: AVFoundation / AVAudioEngine for recording and playback, custom DSP for BPM/key/pitch detection
+- **Persistence**: SwiftData with CloudKit sync
+- **CI**: GitHub Actions — automated build and test on every push/PR ([workflow](.github/workflows))
+- **Testing**: XCTest (unit + UI)
 
-## Project Structure
+## Architecture
 
 ```
-musicProject/
-├── RiffMemo/                  # Main Xcode project
-│   ├── App/                   # App lifecycle, entry point
-│   ├── Core/                  # Core utilities, extensions
-│   ├── Features/              # Feature modules
-│   │   ├── Recording/         # Recording feature
-│   │   ├── Library/           # Library/organization feature
-│   │   ├── Playback/          # Playback feature
-│   │   └── Settings/          # Settings feature
-│   ├── Audio/                 # Audio engine layer
-│   │   ├── Recording/         # Recording manager
-│   │   ├── Playback/          # Playback manager
-│   │   ├── Analysis/          # Pitch, tempo, key detection
-│   │   └── Waveform/          # Waveform rendering
-│   ├── Data/                  # Data layer
-│   │   ├── Models/            # SwiftData models
-│   │   ├── Repositories/      # Data repositories
-│   │   └── Storage/           # File storage utilities
-│   └── Resources/             # Assets, localization
-└── README.md
+RiffMemo/
+├── App/                    # App entry point, root coordinator, tab navigation
+├── Core/                   # Shared utilities, extensions, logging, sharing, haptics
+├── Features/                # SwiftUI views + view models, one folder per feature
+│   ├── Recording/          # Recording flow, live waveform, spectrum visualization
+│   ├── Library/             # Browse, search, organize recordings
+│   ├── Playback/            # Recording detail + playback controls
+│   ├── Waveform/            # Waveform rendering and thumbnails
+│   ├── Analysis/             # Analysis results UI
+│   ├── Metronome/           # Metronome
+│   ├── Tuner/                # Instrument tuner
+│   ├── Export/               # Single + batch export
+│   └── Settings/
+├── Audio/                   # Audio engine layer, isolated from UI
+│   ├── Recording/           # AVAudioEngine-based recording manager
+│   ├── Playback/             # Playback manager
+│   ├── Analysis/             # BPM, key, and pitch detectors; quality analyzer
+│   ├── Metronome/            # Metronome timing engine
+│   └── Export/                # Audio export engine
+├── Data/
+│   ├── Models/                # SwiftData models
+│   ├── Repositories/          # Data access layer
+│   └── Storage/               # File + persistence utilities
+└── Resources/                 # Assets, localization
 ```
 
-## Development Roadmap
-
-### MVP (v1.0) - Target: 14-16 weeks
-- [x] Project setup
-- [ ] Core recording engine (AVAudioEngine)
-- [ ] Basic UI (recording, library, playback screens)
-- [ ] Waveform visualization
-- [ ] Organization (tags, search, favorites)
-- [ ] Audio analysis (tempo, key detection)
-- [ ] iCloud sync
-- [ ] Sharing and export
-
-### Future Features (v1.1+)
-- [ ] Instrument detection
-- [ ] Auto-accompaniment (bass/drums)
-- [ ] Project grouping
-- [ ] Chord detection
-- [ ] Multi-track recording
-- [ ] GarageBand export
+Each feature follows the same shape: a SwiftUI `View`, an `@Observable` `ViewModel` for state and business logic, and a `Coordinator` for navigation. The audio engine and data layers are isolated behind repositories/managers so the UI never talks to AVFoundation or SwiftData directly — this keeps the view models unit-testable without a simulator.
 
 ## Getting Started
 
 ### Prerequisites
-- Xcode 15.0+
-- iOS 17.0+ SDK
-- macOS 14.0+ (Sonoma)
-- Apple Developer account (for device testing)
+- Xcode 15+
+- iOS 17+ SDK
+- macOS 14+ (Sonoma)
+- Apple Developer account (for on-device testing)
 
 ### Setup
-1. Clone this repository
-2. Open `RiffMemo.xcodeproj` in Xcode
-3. Select your development team in signing settings
-4. Build and run on simulator or device
+```bash
+git clone https://github.com/traksaw/riffMemo.git
+cd riffMemo/RiffMemo
+open RiffMemo.xcodeproj
+```
+Select your development team under signing settings, then build and run. See [SETUP_GUIDE.md](SETUP_GUIDE.md) for a walkthrough and [XCODE_FIX_GUIDE.md](XCODE_FIX_GUIDE.md) for common project-setup issues.
 
-### Dependencies
-Managed via Swift Package Manager:
-- AudioKit (planned - for pitch detection)
-- Other dependencies TBD
+### Running tests
+```bash
+cd RiffMemo
+xcodebuild test -project RiffMemo.xcodeproj -scheme RiffMemo \
+  -destination 'generic/platform=iOS Simulator'
+```
+The same build-and-test job runs in CI on every push and pull request against `main`.
 
-## Architecture
+## Roadmap
 
-### MVVM + Coordinator
-- **Views**: SwiftUI views (presentation)
-- **ViewModels**: Business logic, state management (@Observable)
-- **Coordinators**: Navigation flow
-- **Repositories**: Data abstraction layer
-- **Audio Engine**: Isolated audio processing layer
-
-### Key Design Patterns
-- Repository pattern for data access
-- Factory pattern for audio processors
-- Observer pattern for real-time updates
-- Strategy pattern for instrument-specific processing
-
-## Contributing
-
-This is currently a solo project. Contribution guidelines will be added once the MVP is complete.
+- [ ] Instrument detection
+- [ ] Chord detection
+- [ ] Multi-track recording
+- [ ] Auto-accompaniment (bass/drums)
+- [ ] GarageBand export
 
 ## License
 
@@ -111,9 +107,14 @@ MIT License. See [LICENSE](LICENSE) for details.
 
 ## Acknowledgments
 
-Inspired by Apple's Music Memos (2016-2021)
+Inspired by Apple's Music Memos (2016–2021).
+
+## Contact
+
+**Waskar Paulino**
+[GitHub](https://github.com/traksaw) · [LinkedIn](https://www.linkedin.com/in/waskar-m-paulino/) · [workwithwaskar@gmail.com](mailto:workwithwaskar@gmail.com)
 
 ---
 
-**Status**: 🚧 In active development
-**Started**: November 2024
+**Status**: In active development
+**Started**: November 2025
