@@ -31,13 +31,20 @@ jobs:
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO
 
-    - name: Run tests (if available)
+    # `-destination 'generic/platform=iOS Simulator'` only works for building;
+    # the `test` action needs a concrete simulator to actually run tests on.
+    #
+    # This step is the project's safety net: it must be allowed to fail the
+    # job. Do NOT append `|| true` (or otherwise swallow a non-zero exit)
+    # without a specific, documented reason and sign-off — that's what let a
+    # broken destination silently mean "tests never ran" for months while CI
+    # stayed green.
+    - name: Run tests
       run: |
         cd RiffMemo
         xcodebuild test \
           -project RiffMemo.xcodeproj \
           -scheme RiffMemo \
-          -destination 'generic/platform=iOS Simulator' \
+          -destination 'platform=iOS Simulator,name=iPhone 16' \
           CODE_SIGN_IDENTITY="" \
-          CODE_SIGNING_REQUIRED=NO \
-          -only-testing:RiffMemoTests || true
+          CODE_SIGNING_REQUIRED=NO
