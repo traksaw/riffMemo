@@ -16,6 +16,18 @@ struct RecordingView: View {
         self.viewModel = viewModel
     }
 
+    /// While a recording is in progress, the click track's on/off state is owned by
+    /// `SharedMetronomeService.isPlaying` — another screen (e.g. the Metronome tab) can
+    /// stop it out from under us, so this reflects that reality instead of the stale
+    /// local intent flag. Before/after recording, `metronomeEnabled` is just the user's
+    /// intent for the next recording.
+    private var clickTrackToggleBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.isRecording ? metronome.isPlaying : metronomeEnabled },
+            set: { metronomeEnabled = $0 }
+        )
+    }
+
     var body: some View {
         ZStack {
             VStack(spacing: 32) {
@@ -51,7 +63,7 @@ struct RecordingView: View {
             // Metronome Controls (collapsed when not in use)
             VStack(spacing: 12) {
                 // Enable/Disable Toggle
-                Toggle(isOn: $metronomeEnabled) {
+                Toggle(isOn: clickTrackToggleBinding) {
                     HStack(spacing: 6) {
                         Image(systemName: "metronome")
                             .font(.callout)
@@ -61,6 +73,7 @@ struct RecordingView: View {
                 }
                 .tint(.blue)
                 .padding(.horizontal, 32)
+                .accessibilityIdentifier("clickTrackToggle")
                 .onChange(of: metronomeEnabled) { oldValue, newValue in
                     if !newValue && metronome.isPlaying {
                         metronome.stop()
@@ -157,6 +170,7 @@ struct RecordingView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("recordButton")
 
                 // Status Text
                 Text(viewModel.isRecording ? "Recording..." : "Tap to Record")

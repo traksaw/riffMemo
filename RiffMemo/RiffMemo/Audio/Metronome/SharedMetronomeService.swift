@@ -11,6 +11,14 @@ import Combine
 
 /// Shared metronome service for use across the app
 /// Can be used both in standalone metronome and as click track during recording
+///
+/// LESSON (WAS-53): every screen observing this singleton must bind directly to its
+/// `@Published` properties (`isPlaying`, `state`, etc.) — never mirror them into a
+/// screen-local `@State` var. Any tab can start/stop this service out from under
+/// another tab (all tabs stay mounted simultaneously in `MainTabView`), so a mirrored
+/// local copy WILL go stale and silently lie to the user. This is exactly how the
+/// Recording tab's click track toggle kept showing "on" after the Metronome tab
+/// stopped it mid-recording.
 @MainActor
 class SharedMetronomeService: ObservableObject {
 
@@ -814,7 +822,11 @@ class SharedMetronomeService: ObservableObject {
         // Get current audio time
         guard let nodeTime = playerNode.lastRenderTime,
               let playerTime = playerNode.playerTime(forNodeTime: nodeTime) else {
-            // First beat - schedule immediately
+            // Render time isn't available yet (always true for the very first beat, and can
+            // persist indefinitely on the Simulator when CoreAudio keeps "abandoning I/O cycle
+            // because reconfig pending"). Schedule immediately without sample-accurate timing,
+            // but still advance the beat counters below — otherwise displayBeat/currentBeat
+            // freeze at 0 forever and the beat indicator never counts.
             playerNode.scheduleBuffer(clickBuffer, at: nil, options: [], completionHandler: nil)
 
             if !playerNode.isPlaying {
@@ -830,6 +842,7 @@ class SharedMetronomeService: ObservableObject {
             #if DEBUG
             print("✓ First beat scheduled immediately")
             #endif
+            advanceBeatState(isDownbeat: isDownbeat, isMainBeat: isMainBeat, clicksPerBeat: clicksPerBeat)
             return
         }
 
@@ -867,6 +880,14 @@ class SharedMetronomeService: ObservableObject {
         Logger.debug("\(stateLabel) Beat \(beatNumber).\(subdivisionCounter): \(clickType)", category: Logger.audio)
         #endif
 
+        advanceBeatState(isDownbeat: isDownbeat, isMainBeat: isMainBeat, clicksPerBeat: clicksPerBeat)
+    }
+
+    /// Fires haptic feedback and advances the subdivision/beat counters for a played beat.
+    /// Must run after EVERY scheduled beat regardless of which audio-timing path was used —
+    /// skipping this on the "render time unavailable" fallback path is what caused the beat
+    /// indicator to freeze at 0 forever (WAS-53 follow-up).
+    private func advanceBeatState(isDownbeat: Bool, isMainBeat: Bool, clicksPerBeat: Int) {
         // Haptic feedback (always provide, even in visual-only mode)
         if isDownbeat {
             HapticManager.shared.mediumTap()  // Medium tap on downbeat

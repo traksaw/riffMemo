@@ -38,4 +38,60 @@ final class RiffMemoUITests: XCTestCase {
             XCUIApplication().launch()
         }
     }
+
+    // MARK: - WAS-53 repro walkthrough (temporary verification test)
+
+    @MainActor
+    func testMetronomeStateDoesNotLeakSilentlyAcrossTabs() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        func screenshot(_ name: String) {
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+
+        // 1. Go to Recording tab, enable the click track
+        app.tabBars.buttons["Record"].tap()
+        screenshot("01-recording-tab-initial")
+
+        let clickTrackToggle = app.switches["clickTrackToggle"]
+        XCTAssertTrue(clickTrackToggle.waitForExistence(timeout: 5))
+        if (clickTrackToggle.value as? String) != "1" {
+            clickTrackToggle.tap()
+        }
+        XCTAssertEqual(clickTrackToggle.value as? String, "1", "Click track should be enabled before starting the recording")
+        screenshot("02-click-track-enabled")
+
+        // 2. Start recording with the click track (pre-count, then recording)
+        let recordButton = app.buttons["recordButton"]
+        XCTAssertTrue(recordButton.waitForExistence(timeout: 5))
+        recordButton.tap()
+
+        XCTAssertTrue(app.staticTexts["Recording..."].waitForExistence(timeout: 15), "Recording should start after pre-count")
+        screenshot("03-recording-active-with-click-track")
+        XCTAssertEqual(clickTrackToggle.value as? String, "1", "Toggle should reflect the click track actually running")
+
+        // 3. Switch to the Metronome tab mid-recording
+        app.tabBars.buttons["Metronome"].tap()
+        screenshot("04-metronome-tab-while-recording")
+
+        let metronomeStopButton = app.buttons["metronomeStartStopButton"]
+        XCTAssertTrue(metronomeStopButton.waitForExistence(timeout: 5))
+        XCTAssertFalse(metronomeStopButton.isEnabled, "Stop control must be guarded while a click-tracked recording is active (WAS-53)")
+
+        // 4. Switch back to Recording — the toggle must still reflect reality, not a stale value
+        app.tabBars.buttons["Record"].tap()
+        screenshot("05-back-to-recording-after-guarded-metronome-tab")
+
+        XCTAssertTrue(app.staticTexts["Recording..."].exists, "Recording should be uninterrupted since Stop was guarded")
+        XCTAssertEqual(clickTrackToggle.value as? String, "1", "Toggle must still match the actually-running click track — no silent leak")
+
+        // 5. Clean up: stop the recording from the Recording tab itself
+        recordButton.tap()
+        XCTAssertTrue(app.staticTexts["Tap to Record"].waitForExistence(timeout: 5))
+        screenshot("06-recording-stopped-cleanly")
+    }
 }
