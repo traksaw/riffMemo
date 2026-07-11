@@ -9,10 +9,12 @@ on:
 jobs:
   build:
     name: Build and Test
-    # macos-26 ships Xcode 26.x, which is required to build/test against this
-    # project's IPHONEOS_DEPLOYMENT_TARGET = 26.1 (macos-15's Xcode tops out
-    # around iOS 18.5 and can't resolve a matching simulator).
-    runs-on: macos-26
+    # Deliberately NOT macos-26: Xcode 26.x has a known, unresolved hang bug
+    # on GitHub-hosted macOS runners (xcodebuild deadlocks after signing,
+    # before tests run — see actions/runner-images#13264). macos-15 + Xcode
+    # 16.x is the stable combination; the project's deployment target is set
+    # accordingly (see IPHONEOS_DEPLOYMENT_TARGET in project.pbxproj).
+    runs-on: macos-15
 
     steps:
     - name: Checkout code
@@ -48,6 +50,6 @@ jobs:
         xcodebuild test \
           -project RiffMemo.xcodeproj \
           -scheme RiffMemo \
-          -destination 'platform=iOS Simulator,name=iPhone 17' \
+          -destination 'platform=iOS Simulator,name=iPhone 16' \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO
