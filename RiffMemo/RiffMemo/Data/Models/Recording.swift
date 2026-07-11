@@ -8,18 +8,22 @@
 import Foundation
 import SwiftData
 
+// CloudKit's schema mirroring reads each property's schema-level (inline) default,
+// not the custom initializer's parameter defaults. Every non-optional stored
+// property below needs its own `= value` or CloudKit sync fails schema validation
+// the moment it's enabled, even though local SwiftData works fine without it.
 @Model
 final class Recording {
-    var id: UUID
-    var title: String
-    var createdDate: Date
-    var modifiedDate: Date
-    var duration: TimeInterval
+    var id: UUID = UUID()
+    var title: String = ""
+    var createdDate: Date = Date()
+    var modifiedDate: Date = Date()
+    var duration: TimeInterval = 0
 
     // Audio metadata
-    var audioFilename: String  // Store filename only, not full path
-    var fileSize: Int64
-    var sampleRate: Double
+    var audioFilename: String = ""  // Store filename only, not full path
+    var fileSize: Int64 = 0
+    var sampleRate: Double = 44100.0
 
     // Computed property to get the full URL
     var audioFileURL: URL {
@@ -48,8 +52,8 @@ final class Recording {
     var analysisVersion: String?     // Track which version of analysis was used
 
     // User metadata
-    var rating: Int
-    var isFavorite: Bool
+    var rating: Int = 0
+    var isFavorite: Bool = false
     var notes: String?
 
     init(

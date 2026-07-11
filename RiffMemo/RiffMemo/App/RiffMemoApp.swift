@@ -15,7 +15,13 @@ struct RiffMemoApp: App {
 
     init() {
         do {
-            modelContainer = try ModelContainer(for: Recording.self)
+            // WAS-51 added the iCloud/CloudKit entitlement so Recording's schema
+            // could be verified as CloudKit-compatible, but sync itself isn't
+            // live yet. SwiftData auto-enables CloudKit sync whenever the
+            // entitlement is present and no configuration says otherwise, so
+            // this stays local-only until sync is deliberately turned on.
+            let configuration = ModelConfiguration(cloudKitDatabase: .none)
+            modelContainer = try ModelContainer(for: Recording.self, configurations: configuration)
         } catch {
             fatalError("Failed to initialize ModelContainer: \(error)")
         }
