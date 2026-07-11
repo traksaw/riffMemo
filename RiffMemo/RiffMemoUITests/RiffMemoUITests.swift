@@ -41,6 +41,16 @@ final class RiffMemoUITests: XCTestCase {
 
     // MARK: - WAS-53 repro walkthrough (temporary verification test)
 
+    /// Reading `.value` immediately after `.tap()` can catch a stale accessibility-tree
+    /// snapshot before SwiftUI's render pass catches up — poll instead of asserting inline.
+    @MainActor
+    private func waitForToggle(_ toggle: XCUIElement, toBe value: String, timeout: TimeInterval = 3, file: StaticString = #filePath, line: UInt = #line) {
+        let predicate = NSPredicate(format: "value == %@", value)
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: toggle)
+        let result = XCTWaiter().wait(for: [expectation], timeout: timeout)
+        XCTAssertEqual(result, .completed, "Toggle did not reach value \"\(value)\" in time", file: file, line: line)
+    }
+
     @MainActor
     func testMetronomeStateDoesNotLeakSilentlyAcrossTabs() throws {
         let app = XCUIApplication()
@@ -60,9 +70,12 @@ final class RiffMemoUITests: XCTestCase {
         let clickTrackToggle = app.switches["clickTrackToggle"]
         XCTAssertTrue(clickTrackToggle.waitForExistence(timeout: 5))
         if (clickTrackToggle.value as? String) != "1" {
-            clickTrackToggle.tap()
+            // SwiftUI's Toggle exposes an overlapping unlabeled inner Switch element at
+            // this same location; a plain .tap() (center of the whole labeled row) doesn't
+            // reliably land on the actual interactive control. Target the switch knob itself.
+            clickTrackToggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
         }
-        XCTAssertEqual(clickTrackToggle.value as? String, "1", "Click track should be enabled before starting the recording")
+        waitForToggle(clickTrackToggle, toBe: "1")
         screenshot("02-click-track-enabled")
 
         // 2. Start recording with the click track (pre-count, then recording)
@@ -72,7 +85,7 @@ final class RiffMemoUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Recording..."].waitForExistence(timeout: 15), "Recording should start after pre-count")
         screenshot("03-recording-active-with-click-track")
-        XCTAssertEqual(clickTrackToggle.value as? String, "1", "Toggle should reflect the click track actually running")
+        waitForToggle(clickTrackToggle, toBe: "1")
 
         // 3. Switch to the Metronome tab mid-recording
         app.tabBars.buttons["Metronome"].tap()
@@ -87,7 +100,7 @@ final class RiffMemoUITests: XCTestCase {
         screenshot("05-back-to-recording-after-guarded-metronome-tab")
 
         XCTAssertTrue(app.staticTexts["Recording..."].exists, "Recording should be uninterrupted since Stop was guarded")
-        XCTAssertEqual(clickTrackToggle.value as? String, "1", "Toggle must still match the actually-running click track — no silent leak")
+        waitForToggle(clickTrackToggle, toBe: "1")
 
         // 5. Clean up: stop the recording from the Recording tab itself
         recordButton.tap()
