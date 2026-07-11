@@ -13,8 +13,12 @@ jobs:
     # on GitHub-hosted macOS runners (xcodebuild deadlocks after signing,
     # before tests run — see actions/runner-images#13264). macos-15 + Xcode
     # 16.x is the stable combination; the project's deployment target is set
-    # accordingly (see IPHONEOS_DEPLOYMENT_TARGET in project.pbxproj).
+    # accordingly (see IPHONEOS_DEPLOYMENT_TARGET in project.pbxproj). This
+    # same class of hang has recurred occasionally even on macos-15 — the
+    # timeout below ensures a hang fails the job within minutes instead of
+    # silently consuming the default 360-minute job timeout.
     runs-on: macos-15
+    timeout-minutes: 20
 
     steps:
     - name: Checkout code
