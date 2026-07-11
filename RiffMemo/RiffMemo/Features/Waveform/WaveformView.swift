@@ -137,6 +137,8 @@ struct WaveformView: View {
                     HapticManager.shared.impact(style: .light)
                 }
         )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Waveform scrubber")
     }
 }
 

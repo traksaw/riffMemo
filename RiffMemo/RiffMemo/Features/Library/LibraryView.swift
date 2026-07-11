@@ -60,6 +60,7 @@ struct LibraryView: View {
                                 } label: {
                                     RecordingRow(recording: recording)
                                 }
+                                .accessibilityIdentifier("recordingRow")
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                     Button(role: .destructive) {
                                         Task {
