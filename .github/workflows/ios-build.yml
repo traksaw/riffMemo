@@ -56,4 +56,5 @@ jobs:
           -scheme RiffMemo \
           -destination 'platform=iOS Simulator,name=iPhone 16' \
           CODE_SIGN_IDENTITY="" \
-          CODE_SIGNING_REQUIRED=NO
+          CODE_SIGNING_REQUIRED=NO \
+          -only-testing:RiffMemoTests/RiffMemoTests
