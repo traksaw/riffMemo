@@ -43,8 +43,10 @@ final class RiffMemoUITests: XCTestCase {
 
     /// Reading `.value` immediately after `.tap()` can catch a stale accessibility-tree
     /// snapshot before SwiftUI's render pass catches up — poll instead of asserting inline.
+    /// Default generous enough for a slow/contended CI runner (observed ~3-5x slower than
+    /// a local dev machine), not just a fast local one.
     @MainActor
-    private func waitForToggle(_ toggle: XCUIElement, toBe value: String, timeout: TimeInterval = 3, file: StaticString = #filePath, line: UInt = #line) {
+    private func waitForToggle(_ toggle: XCUIElement, toBe value: String, timeout: TimeInterval = 8, file: StaticString = #filePath, line: UInt = #line) {
         let predicate = NSPredicate(format: "value == %@", value)
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: toggle)
         let result = XCTWaiter().wait(for: [expectation], timeout: timeout)
@@ -68,7 +70,7 @@ final class RiffMemoUITests: XCTestCase {
         screenshot("01-recording-tab-initial")
 
         let clickTrackToggle = app.switches["clickTrackToggle"]
-        XCTAssertTrue(clickTrackToggle.waitForExistence(timeout: 5))
+        XCTAssertTrue(clickTrackToggle.waitForExistence(timeout: 10))
         if (clickTrackToggle.value as? String) != "1" {
             // SwiftUI's Toggle exposes an overlapping unlabeled inner Switch element at
             // this same location; a plain .tap() (center of the whole labeled row) doesn't
@@ -80,10 +82,10 @@ final class RiffMemoUITests: XCTestCase {
 
         // 2. Start recording with the click track (pre-count, then recording)
         let recordButton = app.buttons["recordButton"]
-        XCTAssertTrue(recordButton.waitForExistence(timeout: 5))
+        XCTAssertTrue(recordButton.waitForExistence(timeout: 10))
         recordButton.tap()
 
-        XCTAssertTrue(app.staticTexts["Recording..."].waitForExistence(timeout: 15), "Recording should start after pre-count")
+        XCTAssertTrue(app.staticTexts["Recording..."].waitForExistence(timeout: 30), "Recording should start after pre-count")
         screenshot("03-recording-active-with-click-track")
         waitForToggle(clickTrackToggle, toBe: "1")
 
@@ -92,7 +94,7 @@ final class RiffMemoUITests: XCTestCase {
         screenshot("04-metronome-tab-while-recording")
 
         let metronomeStopButton = app.buttons["metronomeStartStopButton"]
-        XCTAssertTrue(metronomeStopButton.waitForExistence(timeout: 5))
+        XCTAssertTrue(metronomeStopButton.waitForExistence(timeout: 10))
         XCTAssertFalse(metronomeStopButton.isEnabled, "Stop control must be guarded while a click-tracked recording is active (WAS-53)")
 
         // 4. Switch back to Recording — the toggle must still reflect reality, not a stale value
@@ -104,7 +106,7 @@ final class RiffMemoUITests: XCTestCase {
 
         // 5. Clean up: stop the recording from the Recording tab itself
         recordButton.tap()
-        XCTAssertTrue(app.staticTexts["Tap to Record"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Tap to Record"].waitForExistence(timeout: 10))
         screenshot("06-recording-stopped-cleanly")
     }
 }
