@@ -38,4 +38,75 @@ final class RiffMemoUITests: XCTestCase {
             XCUIApplication().launch()
         }
     }
+
+    // MARK: - WAS-53 repro walkthrough (temporary verification test)
+
+    /// Reading `.value` immediately after `.tap()` can catch a stale accessibility-tree
+    /// snapshot before SwiftUI's render pass catches up — poll instead of asserting inline.
+    /// Default generous enough for a slow/contended CI runner (observed ~3-5x slower than
+    /// a local dev machine), not just a fast local one.
+    @MainActor
+    private func waitForToggle(_ toggle: XCUIElement, toBe value: String, timeout: TimeInterval = 8, file: StaticString = #filePath, line: UInt = #line) {
+        let predicate = NSPredicate(format: "value == %@", value)
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: toggle)
+        let result = XCTWaiter().wait(for: [expectation], timeout: timeout)
+        XCTAssertEqual(result, .completed, "Toggle did not reach value \"\(value)\" in time", file: file, line: line)
+    }
+
+    @MainActor
+    func testMetronomeStateDoesNotLeakSilentlyAcrossTabs() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        func screenshot(_ name: String) {
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+
+        // 1. Go to Recording tab, enable the click track
+        app.tabBars.buttons["Record"].tap()
+        screenshot("01-recording-tab-initial")
+
+        let clickTrackToggle = app.switches["clickTrackToggle"]
+        XCTAssertTrue(clickTrackToggle.waitForExistence(timeout: 10))
+        if (clickTrackToggle.value as? String) != "1" {
+            // SwiftUI's Toggle exposes an overlapping unlabeled inner Switch element at
+            // this same location; a plain .tap() (center of the whole labeled row) doesn't
+            // reliably land on the actual interactive control. Target the switch knob itself.
+            clickTrackToggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        }
+        waitForToggle(clickTrackToggle, toBe: "1")
+        screenshot("02-click-track-enabled")
+
+        // 2. Start recording with the click track (pre-count, then recording)
+        let recordButton = app.buttons["recordButton"]
+        XCTAssertTrue(recordButton.waitForExistence(timeout: 10))
+        recordButton.tap()
+
+        XCTAssertTrue(app.staticTexts["Recording..."].waitForExistence(timeout: 30), "Recording should start after pre-count")
+        screenshot("03-recording-active-with-click-track")
+        waitForToggle(clickTrackToggle, toBe: "1")
+
+        // 3. Switch to the Metronome tab mid-recording
+        app.tabBars.buttons["Metronome"].tap()
+        screenshot("04-metronome-tab-while-recording")
+
+        let metronomeStopButton = app.buttons["metronomeStartStopButton"]
+        XCTAssertTrue(metronomeStopButton.waitForExistence(timeout: 10))
+        XCTAssertFalse(metronomeStopButton.isEnabled, "Stop control must be guarded while a click-tracked recording is active (WAS-53)")
+
+        // 4. Switch back to Recording — the toggle must still reflect reality, not a stale value
+        app.tabBars.buttons["Record"].tap()
+        screenshot("05-back-to-recording-after-guarded-metronome-tab")
+
+        XCTAssertTrue(app.staticTexts["Recording..."].exists, "Recording should be uninterrupted since Stop was guarded")
+        waitForToggle(clickTrackToggle, toBe: "1")
+
+        // 5. Clean up: stop the recording from the Recording tab itself
+        recordButton.tap()
+        XCTAssertTrue(app.staticTexts["Tap to Record"].waitForExistence(timeout: 10))
+        screenshot("06-recording-stopped-cleanly")
+    }
 }

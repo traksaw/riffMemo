@@ -10,6 +10,13 @@ import SwiftUI
 struct MetronomeView: View {
     @ObservedObject private var metronome = SharedMetronomeService.shared
 
+    /// A click-tracked recording (pre-count or actively recording) owns the shared
+    /// metronome — this screen must not be able to silently stop it out from under
+    /// an active recording.
+    private var isLockedByActiveRecording: Bool {
+        metronome.state == .preCount || metronome.state == .recording
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -402,6 +409,17 @@ struct MetronomeView: View {
                         .shadow(radius: 8)
                     }
                     .buttonStyle(.plain)
+                    .disabled(isLockedByActiveRecording)
+                    .opacity(isLockedByActiveRecording ? 0.5 : 1.0)
+                    .accessibilityIdentifier("metronomeStartStopButton")
+
+                    if isLockedByActiveRecording {
+                        Text("Click track is driving an active recording — stop the recording to control the metronome here.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
+                    }
 
                     Spacer()
                         .frame(height: 40)
@@ -412,7 +430,7 @@ struct MetronomeView: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .onDisappear {
-            if metronome.isPlaying {
+            if metronome.isPlaying && !isLockedByActiveRecording {
                 metronome.stop()
             }
         }

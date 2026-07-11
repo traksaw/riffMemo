@@ -36,6 +36,20 @@ final class AudioDetectorShortRecordingTests: XCTestCase {
         XCTAssertNil(key)
     }
 
+    // MARK: - WAS-53 follow-up: oversized/corrupted frameCount used to abort the process
+    // (AVAudioPCMBuffer's internal size math overflows unsigned 32-bit arithmetic and
+    // throws a C++ exception Swift can't catch) instead of throwing a Swift error.
+
+    func testAudioBufferSafetyAllowsNormalFrameCount() {
+        let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2)!
+        XCTAssertFalse(AudioBufferSafety.exceedsMaxBufferSize(frameCount: 44100 * 60 * 5, format: format))
+    }
+
+    func testAudioBufferSafetyRejectsOversizedFrameCount() {
+        let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2)!
+        XCTAssertTrue(AudioBufferSafety.exceedsMaxBufferSize(frameCount: AVAudioFrameCount.max, format: format))
+    }
+
     private func makeDummyRecording(title: String, duration: TimeInterval) -> Recording {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".caf")
         return Recording(title: title, duration: duration, audioFileURL: url)

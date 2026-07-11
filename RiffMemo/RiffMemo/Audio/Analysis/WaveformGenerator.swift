@@ -32,6 +32,10 @@ actor WaveformGenerator {
             throw WaveformError.emptyFile
         }
 
+        guard !AudioBufferSafety.exceedsMaxBufferSize(frameCount: frameCount, format: format) else {
+            throw WaveformError.frameCountTooLarge
+        }
+
         // Create buffer to read audio data
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
             throw WaveformError.bufferAllocationFailed
@@ -161,6 +165,7 @@ enum WaveformError: LocalizedError {
     case bufferAllocationFailed
     case noChannelData
     case invalidData
+    case frameCountTooLarge
 
     var errorDescription: String? {
         switch self {
@@ -170,6 +175,8 @@ enum WaveformError: LocalizedError {
             return "Failed to allocate audio buffer"
         case .noChannelData:
             return "No channel data available in audio file"
+        case .frameCountTooLarge:
+            return "Audio file length is too large to process"
         case .invalidData:
             return "Invalid waveform data"
         }

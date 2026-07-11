@@ -29,6 +29,10 @@ actor AudioQualityAnalyzer {
             throw QualityAnalysisError.emptyFile
         }
 
+        guard !AudioBufferSafety.exceedsMaxBufferSize(frameCount: frameCount, format: format) else {
+            throw QualityAnalysisError.frameCountTooLarge
+        }
+
         // Read audio data
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
             throw QualityAnalysisError.bufferAllocationFailed
@@ -236,6 +240,7 @@ enum QualityAnalysisError: LocalizedError {
     case emptyFile
     case bufferAllocationFailed
     case noChannelData
+    case frameCountTooLarge
 
     var errorDescription: String? {
         switch self {
@@ -245,6 +250,8 @@ enum QualityAnalysisError: LocalizedError {
             return "Failed to allocate audio buffer"
         case .noChannelData:
             return "No channel data available"
+        case .frameCountTooLarge:
+            return "Audio file length is too large to process"
         }
     }
 }

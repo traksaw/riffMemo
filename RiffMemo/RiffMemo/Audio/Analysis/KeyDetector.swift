@@ -41,6 +41,10 @@ actor KeyDetector {
             throw KeyDetectionError.emptyFile
         }
 
+        guard !AudioBufferSafety.exceedsMaxBufferSize(frameCount: frameCount, format: format) else {
+            throw KeyDetectionError.frameCountTooLarge
+        }
+
         // Read audio data
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
             throw KeyDetectionError.bufferAllocationFailed
@@ -253,6 +257,7 @@ enum KeyDetectionError: LocalizedError {
     case emptyFile
     case bufferAllocationFailed
     case noChannelData
+    case frameCountTooLarge
 
     var errorDescription: String? {
         switch self {
@@ -262,6 +267,8 @@ enum KeyDetectionError: LocalizedError {
             return "Failed to allocate audio buffer"
         case .noChannelData:
             return "No channel data available"
+        case .frameCountTooLarge:
+            return "Audio file length is too large to process"
         }
     }
 }
