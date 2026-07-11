@@ -9,7 +9,10 @@ on:
 jobs:
   build:
     name: Build and Test
-    runs-on: macos-15  # Use macOS 15 which has Xcode 16+
+    # macos-26 ships Xcode 26.x, which is required to build/test against this
+    # project's IPHONEOS_DEPLOYMENT_TARGET = 26.1 (macos-15's Xcode tops out
+    # around iOS 18.5 and can't resolve a matching simulator).
+    runs-on: macos-26
 
     steps:
     - name: Checkout code
@@ -45,6 +48,6 @@ jobs:
         xcodebuild test \
           -project RiffMemo.xcodeproj \
           -scheme RiffMemo \
-          -destination 'platform=iOS Simulator,name=iPhone 16' \
+          -destination 'platform=iOS Simulator,name=iPhone 17' \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO
