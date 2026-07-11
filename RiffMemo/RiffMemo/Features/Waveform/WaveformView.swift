@@ -19,7 +19,15 @@ struct WaveformView: View {
 
     // Internal state
     @State private var isDragging = false
+    @State private var viewWidth: CGFloat = 0
     @GestureState private var dragProgress: Double? = nil
+
+    /// Converts an absolute drag location into a clamped 0...1 progress value.
+    /// Guards against a zero-width view (not yet laid out) to avoid NaN.
+    static func progress(forLocationX x: CGFloat, width: CGFloat) -> Double {
+        guard width > 0 else { return 0 }
+        return min(max(Double(x / width), 0), 1)
+    }
 
     init(
         samples: [Float],
@@ -96,12 +104,16 @@ struct WaveformView: View {
             }
         }
         .contentShape(Rectangle()) // Make entire area tappable
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { newWidth in
+            viewWidth = newWidth
+        }
         .gesture(
             DragGesture(minimumDistance: 0)
                 .updating($dragProgress) { value, state, _ in
-                    // Calculate progress from drag location
-                    let progress = min(max(value.location.x / value.startLocation.x * currentProgress, 0), 1)
-                    state = progress
+                    // Absolute position along the view, not relative to drag start
+                    state = Self.progress(forLocationX: value.location.x, width: viewWidth)
                 }
                 .onChanged { value in
                     if !isDragging {
@@ -110,11 +122,9 @@ struct WaveformView: View {
                     }
                 }
                 .onEnded { value in
-                    // Calculate final seek position
                     guard let onSeek = onSeek else { return }
 
-                    // Get the geometry of the gesture
-                    let progress = min(max(value.location.x / max(value.startLocation.x * 2, 1), 0), 1)
+                    let progress = Self.progress(forLocationX: value.location.x, width: viewWidth)
 
                     HapticManager.shared.impact(style: .medium)
                     onSeek(progress)
@@ -127,6 +137,8 @@ struct WaveformView: View {
                     HapticManager.shared.impact(style: .light)
                 }
         )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Waveform scrubber")
     }
 }
 

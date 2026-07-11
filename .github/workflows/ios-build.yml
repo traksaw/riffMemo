@@ -18,7 +18,7 @@ jobs:
     # timeout below ensures a hang fails the job within minutes instead of
     # silently consuming the default 360-minute job timeout.
     runs-on: macos-15
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
     - name: Checkout code

@@ -51,6 +51,7 @@ struct RecordingDetailView: View {
                         }
                     )
                     .frame(height: 120)
+                    .accessibilityIdentifier("waveformView")
                 } else {
                     WaveformPlaceholder()
                         .frame(height: 120)
@@ -64,6 +65,7 @@ struct RecordingDetailView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
+                    .accessibilityIdentifier("currentTimeLabel")
 
                 Spacer()
 

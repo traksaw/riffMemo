@@ -109,4 +109,90 @@ final class RiffMemoUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Tap to Record"].waitForExistence(timeout: 10))
         screenshot("06-recording-stopped-cleanly")
     }
+
+    // MARK: - WAS-52 waveform drag-to-seek repro walkthrough
+
+    /// Records a real clip, opens it, and drags the waveform to prove the fix against the
+    /// actual regression rather than just the extracted math: the old formula
+    /// (`location.x / startLocation.x`) made the seek result depend on where the drag
+    /// began, and a drag starting exactly at x=0 produced NaN, which crashed
+    /// `formattedDuration()`'s `Int(self)` conversion when it tried to render the seeked time.
+    @MainActor
+    func testWaveformScrubbingTracksFingerAbsolutePosition() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        func screenshot(_ name: String) {
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+
+        // 1. Record a clip long enough to give the waveform a meaningful duration to scrub across.
+        app.tabBars.buttons["Record"].tap()
+        let recordButton = app.buttons["recordButton"]
+        XCTAssertTrue(recordButton.waitForExistence(timeout: 10))
+        recordButton.tap()
+        XCTAssertTrue(app.staticTexts["Recording..."].waitForExistence(timeout: 10), "Recording should start")
+
+        Thread.sleep(forTimeInterval: 5)
+
+        recordButton.tap()
+        XCTAssertTrue(app.staticTexts["Tap to Record"].waitForExistence(timeout: 10), "Recording should stop")
+        screenshot("01-recording-saved")
+
+        // 2. Open the recording we just made. Library sorts newest-first, so it's the first row.
+        app.tabBars.buttons["Library"].tap()
+        let recordingRow = app.descendants(matching: .any)["recordingRow"].firstMatch
+        XCTAssertTrue(recordingRow.waitForExistence(timeout: 10), "The recording we just made should appear in the Library")
+        // The row combines a title, an edit pencil, and its own interactive waveform thumbnail
+        // into one accessibility element; a plain .tap() lands ambiguously. Target the title
+        // text specifically, away from both the pencil (trailing edge) and the thumbnail
+        // (lower half) - same workaround this file already uses for clickTrackToggle above.
+        recordingRow.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.12)).tap()
+
+        let waveform = app.descendants(matching: .any)["waveformView"].firstMatch
+        XCTAssertTrue(waveform.waitForExistence(timeout: 15), "Waveform should finish loading")
+        screenshot("02-waveform-loaded")
+
+        // 3. Root-cause regression: two drags that END at the same absolute location but
+        // START from different points must land on the same seek position. Under the old
+        // startLocation-relative formula these would have produced different results.
+        let target = CGVector(dx: 0.6, dy: 0.5)
+
+        let slider = app.sliders.firstMatch
+        XCTAssertTrue(slider.waitForExistence(timeout: 5))
+
+        let fromNearStart = waveform.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5))
+        fromNearStart.press(forDuration: 0.05, thenDragTo: waveform.coordinate(withNormalizedOffset: target))
+        screenshot("03-dragged-from-near-start")
+        let valueAfterDragFromNearStart = try XCTUnwrap(slider.value as? String)
+
+        let fromNearEnd = waveform.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
+        fromNearEnd.press(forDuration: 0.05, thenDragTo: waveform.coordinate(withNormalizedOffset: target))
+        screenshot("04-dragged-from-near-end")
+        let valueAfterDragFromNearEnd = try XCTUnwrap(slider.value as? String)
+
+        XCTAssertEqual(
+            valueAfterDragFromNearStart,
+            valueAfterDragFromNearEnd,
+            "Dragging to the same absolute location should land on the same seek position regardless of where the drag started (WAS-52)"
+        )
+
+        // 4. NaN regression: starting a drag exactly at x=0 must not crash the app (the old
+        // formula divided by startLocation.x, and 0/0 is NaN).
+        let fromZero = waveform.coordinate(withNormalizedOffset: CGVector(dx: 0.0, dy: 0.5))
+        fromZero.press(forDuration: 0.05, thenDragTo: waveform.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5)))
+        screenshot("05-dragged-from-x-zero")
+
+        XCTAssertEqual(app.state, .runningForeground, "App must not crash when a drag starts at x=0 (WAS-52 NaN regression)")
+
+        let timeLabel = app.staticTexts["currentTimeLabel"]
+        XCTAssertTrue(timeLabel.waitForExistence(timeout: 5))
+        XCTAssertFalse(timeLabel.label.isEmpty, "Current time should still render a valid (non-NaN) value after the x=0 drag")
+
+        // 5. Confirm the app is still fully interactive afterward (proves no NaN froze playback state).
+        XCTAssertTrue(waveform.isHittable, "Waveform should remain interactive after the x=0 drag")
+    }
 }
