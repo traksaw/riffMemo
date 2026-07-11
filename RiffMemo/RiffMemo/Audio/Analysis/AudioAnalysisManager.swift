@@ -13,6 +13,13 @@ import Observation
 @Observable
 class AudioAnalysisManager {
 
+    // MARK: - Constants
+
+    /// Minimum recording duration required to attempt BPM/key analysis.
+    /// Comfortably above both detectors' frame sizes (BPM ~46ms, Key ~93ms)
+    /// so `numFrames` never goes negative in either detector.
+    static let minimumAnalyzableDuration: TimeInterval = 0.25
+
     // MARK: - Published State
 
     var isAnalyzing: Bool = false
@@ -120,6 +127,8 @@ class AudioAnalysisManager {
 
     /// Adds a recording to the analysis queue
     func queueAnalysis(_ recording: Recording, options: AnalysisOptions = .all) {
+        guard isAnalyzable(recording) else { return }
+
         analysisQueue.append(recording)
         Logger.info("Queued analysis for: \(recording.title)", category: Logger.audio)
 
@@ -132,14 +141,25 @@ class AudioAnalysisManager {
 
     /// Adds multiple recordings to the analysis queue
     func queueBatchAnalysis(_ recordings: [Recording], options: AnalysisOptions = .all) {
-        analysisQueue.append(contentsOf: recordings)
-        Logger.info("Queued \(recordings.count) recordings for analysis", category: Logger.audio)
+        let analyzable = recordings.filter(isAnalyzable)
+
+        analysisQueue.append(contentsOf: analyzable)
+        Logger.info("Queued \(analyzable.count) recordings for analysis", category: Logger.audio)
 
         if !isProcessingQueue {
             Task {
                 await processQueue(options: options)
             }
         }
+    }
+
+    /// Returns whether a recording is long enough to attempt BPM/key analysis.
+    private func isAnalyzable(_ recording: Recording) -> Bool {
+        guard recording.duration >= Self.minimumAnalyzableDuration else {
+            Logger.info("Skipping analysis for \(recording.title): duration \(recording.duration)s below minimum \(Self.minimumAnalyzableDuration)s", category: Logger.audio)
+            return false
+        }
+        return true
     }
 
     /// Processes the analysis queue in the background
