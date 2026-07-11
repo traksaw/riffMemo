@@ -34,7 +34,10 @@ final class RecordingViewModelTests: XCTestCase {
         XCTAssertNotNil(recording.id)
         XCTAssertEqual(recording.title, title)
         XCTAssertEqual(recording.duration, duration)
-        XCTAssertEqual(recording.audioFileURL, url)
+        // Recording stores only the filename and resolves audioFileURL against
+        // the current Documents directory, so the last path component round-trips
+        // but the full URL passed in does not.
+        XCTAssertEqual(recording.audioFileURL.lastPathComponent, url.lastPathComponent)
         XCTAssertEqual(recording.fileSize, 1024)
         XCTAssertNotNil(recording.createdDate)
     }
@@ -65,23 +68,23 @@ final class RecordingViewModelTests: XCTestCase {
         XCTAssertEqual(59.0.formattedDuration(), "0:59")
         XCTAssertEqual(60.0.formattedDuration(), "1:00")
         XCTAssertEqual(125.5.formattedDuration(), "2:05")
-        XCTAssertEqual(3661.0.formattedDuration(), "1:01:01")
+        // formattedDuration() always renders MM:SS, even past an hour;
+        // formattedLongDuration() is the HH:MM:SS variant.
+        XCTAssertEqual(3661.0.formattedDuration(), "61:01")
+        XCTAssertEqual(3661.0.formattedLongDuration(), "1:01:01")
     }
 
     func testDateFormatting() {
         // Given
-        let calendar = Calendar.current
-        let components = DateComponents(year: 2025, month: 11, day: 16, hour: 14, minute: 30)
-        let testDate = calendar.date(from: components)!
+        let oneHourAgo = Date(timeIntervalSinceNow: -3600)
 
         // When
-        let formatted = testDate.formattedForRecording()
+        let formatted = oneHourAgo.formattedForRecording()
 
         // Then
-        // Format should be "Nov 16, 2025 at 2:30 PM" or similar
-        XCTAssertTrue(formatted.contains("Nov"))
-        XCTAssertTrue(formatted.contains("16"))
-        XCTAssertTrue(formatted.contains("2025"))
+        // formattedForRecording() renders a relative string (e.g. "1 hour ago")
+        XCTAssertFalse(formatted.isEmpty)
+        XCTAssertTrue(formatted.contains("ago"))
     }
 
     // MARK: - Logger Tests

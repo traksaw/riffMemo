@@ -9,7 +9,12 @@ on:
 jobs:
   build:
     name: Build and Test
-    runs-on: macos-15  # Use macOS 15 which has Xcode 16+
+    # Deliberately NOT macos-26: Xcode 26.x has a known, unresolved hang bug
+    # on GitHub-hosted macOS runners (xcodebuild deadlocks after signing,
+    # before tests run — see actions/runner-images#13264). macos-15 + Xcode
+    # 16.x is the stable combination; the project's deployment target is set
+    # accordingly (see IPHONEOS_DEPLOYMENT_TARGET in project.pbxproj).
+    runs-on: macos-15
 
     steps:
     - name: Checkout code
@@ -31,13 +36,20 @@ jobs:
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO
 
-    - name: Run tests (if available)
+    # `-destination 'generic/platform=iOS Simulator'` only works for building;
+    # the `test` action needs a concrete simulator to actually run tests on.
+    #
+    # This step is the project's safety net: it must be allowed to fail the
+    # job. Do NOT append `|| true` (or otherwise swallow a non-zero exit)
+    # without a specific, documented reason and sign-off — that's what let a
+    # broken destination silently mean "tests never ran" for months while CI
+    # stayed green.
+    - name: Run tests
       run: |
         cd RiffMemo
         xcodebuild test \
           -project RiffMemo.xcodeproj \
           -scheme RiffMemo \
-          -destination 'generic/platform=iOS Simulator' \
+          -destination 'platform=iOS Simulator,name=iPhone 16' \
           CODE_SIGN_IDENTITY="" \
-          CODE_SIGNING_REQUIRED=NO \
-          -only-testing:RiffMemoTests || true
+          CODE_SIGNING_REQUIRED=NO
