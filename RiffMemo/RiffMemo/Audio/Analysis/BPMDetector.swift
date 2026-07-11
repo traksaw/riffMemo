@@ -78,6 +78,10 @@ actor BPMDetector {
     private func calculateOnsetEnvelope(samples: [Float], sampleRate: Double) -> [Float] {
         let numFrames = (samples.count - frameSize) / hopSize
 
+        // Guard against short recordings: a negative numFrames would pass a
+        // negative count to [Float](repeating:count:), which traps unconditionally in Swift.
+        guard numFrames > 0 else { return [] }
+
         var onsetStrength = [Float](repeating: 0, count: numFrames)
         var previousMagnitudes = [Float](repeating: 0, count: frameSize / 2)
 

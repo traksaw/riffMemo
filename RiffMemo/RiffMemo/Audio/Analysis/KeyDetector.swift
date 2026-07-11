@@ -85,6 +85,10 @@ actor KeyDetector {
 
         let numFrames = (samples.count - frameSize) / hopSize
 
+        // Guard against short recordings: a negative numFrames would build a
+        // range with a negative upper bound, which traps unconditionally in Swift.
+        guard numFrames > 0 else { return pitchClasses }
+
         // Setup FFT
         guard let fftSetup = vDSP_DFT_zop_CreateSetup(
             nil,
@@ -170,6 +174,10 @@ actor KeyDetector {
 
     /// Detects key from pitch class profile using Krumhansl-Schmuckler algorithm
     private func detectKeyFromProfile(_ profile: [Double]) -> String? {
+        // A profile with no pitch energy (silence, or too short to analyze) correlates
+        // equally (zero) with every key, which would otherwise always "win" as C Major.
+        guard profile.reduce(0, +) > 0 else { return nil }
+
         var bestCorrelation = -Double.infinity
         var bestKey: String?
 
