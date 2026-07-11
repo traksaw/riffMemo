@@ -273,9 +273,13 @@ class SharedMetronomeService: ObservableObject {
         saveSettings()
 
         if isPlaying {
-            // Restart with new tempo
+            // Restart with new tempo. start() always resets state to .standalone, which
+            // would silently un-guard the Metronome tab's Stop control mid-recording —
+            // preserve whatever state we were actually in (WAS-53 follow-up).
+            let previousState = state
             stop()
             start()
+            state = previousState
         }
     }
 
