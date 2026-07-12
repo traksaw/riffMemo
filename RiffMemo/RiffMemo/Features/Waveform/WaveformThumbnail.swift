@@ -13,24 +13,24 @@ struct WaveformThumbnail: View {
     let recording: Recording
     let height: CGFloat
 
-    @State private var samples: [Float] = []
-    @State private var isLoading = false
+    @State private var viewModel: WaveformViewModel
 
     init(recording: Recording, height: CGFloat = 40) {
         self.recording = recording
         self.height = height
+        self._viewModel = State(initialValue: WaveformViewModel(recording: recording, targetSamples: 100))
     }
 
     var body: some View {
         Group {
-            if isLoading {
+            if viewModel.isLoading {
                 // Loading skeleton
                 WaveformSkeleton()
                     .frame(height: height)
-            } else if !samples.isEmpty {
+            } else if !viewModel.samples.isEmpty {
                 // Actual waveform
                 WaveformView(
-                    samples: samples,
+                    samples: viewModel.samples,
                     configuration: .thumbnail
                 )
                 .frame(height: height)
@@ -41,41 +41,8 @@ struct WaveformThumbnail: View {
             }
         }
         .task {
-            await loadWaveform()
+            await viewModel.loadWaveform()
         }
-    }
-
-    private func loadWaveform() async {
-        // Check cache first
-        if let cachedData = recording.waveformData {
-            let generator = WaveformGenerator()
-            samples = await generator.decodeWaveform(from: cachedData)
-            return
-        }
-
-        // Generate if not cached
-        isLoading = true
-        let generator = WaveformGenerator()
-
-        do {
-            // Use fewer samples for thumbnails (100 instead of 300)
-            samples = try await generator.generateWaveform(
-                from: recording.audioFileURL,
-                targetSamples: 100
-            )
-
-            // Cache for future use
-            let data = try await generator.generateWaveformData(
-                from: recording.audioFileURL,
-                targetSamples: 100
-            )
-            recording.waveformData = data
-
-        } catch {
-            Logger.error("Failed to load thumbnail waveform: \(error)", category: Logger.audio)
-        }
-
-        isLoading = false
     }
 }
 
