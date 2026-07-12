@@ -47,10 +47,26 @@ class SwiftDataRecordingRepository: RecordingRepository {
         Logger.info("Recording saved: \(recording.title)", category: Logger.data)
     }
 
+    /// Delete operations own both the SwiftData row and its associated audio
+    /// file on disk. If a future delete path is added (e.g. a bulk import
+    /// rollback), it must route through here or repeat this file cleanup —
+    /// otherwise it will silently leak storage the same way WAS-50 did.
     func delete(_ recording: Recording) async throws {
+        try deleteAudioFile(at: recording.audioFileURL)
         modelContext.delete(recording)
         try modelContext.save()
         Logger.info("Recording deleted: \(recording.title)", category: Logger.data)
+    }
+
+    /// Removes the file first so a failed deletion leaves the DB row pointing
+    /// at a real file rather than nothing. A missing file (e.g. from a prior
+    /// partial failure) is not a blocking error.
+    private func deleteAudioFile(at url: URL) throws {
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == NSFileNoSuchFileError {
+            Logger.info("Audio file already absent, skipping: \(url.lastPathComponent)", category: Logger.data)
+        }
     }
 
     func update(_ recording: Recording) async throws {
