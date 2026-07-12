@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import AVFoundation
 import Accelerate
 
 /// Actor responsible for generating waveform data from audio files
@@ -23,33 +22,8 @@ actor WaveformGenerator {
     func generateWaveform(from url: URL, targetSamples: Int = 300) async throws -> [Float] {
         Logger.info("Generating waveform for \(url.lastPathComponent) with \(targetSamples) samples", category: Logger.audio)
 
-        // Open the audio file
-        let audioFile = try AVAudioFile(forReading: url)
-        let format = audioFile.processingFormat
-        let frameCount = AVAudioFrameCount(audioFile.length)
-
-        guard frameCount > 0 else {
-            throw WaveformError.emptyFile
-        }
-
-        guard !AudioBufferSafety.exceedsMaxBufferSize(frameCount: frameCount, format: format) else {
-            throw WaveformError.frameCountTooLarge
-        }
-
-        // Create buffer to read audio data
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
-            throw WaveformError.bufferAllocationFailed
-        }
-
-        // Read the entire file into the buffer
-        try audioFile.read(into: buffer)
-
-        guard let channelData = buffer.floatChannelData else {
-            throw WaveformError.noChannelData
-        }
-
-        // Extract samples from the first channel
-        let samples = extractSamples(from: channelData[0], frameCount: Int(buffer.frameLength))
+        let loaded = try AudioSampleLoader.load(from: url)
+        let samples = loaded.samples
 
         // Downsample to target number of samples
         let downsampled = downsample(samples: samples, to: targetSamples)
@@ -93,17 +67,6 @@ actor WaveformGenerator {
     }
 
     // MARK: - Private Methods
-
-    /// Extracts samples from raw channel data
-    private func extractSamples(from channelData: UnsafeMutablePointer<Float>, frameCount: Int) -> [Float] {
-        var samples = [Float](repeating: 0, count: frameCount)
-
-        for i in 0..<frameCount {
-            samples[i] = channelData[i]
-        }
-
-        return samples
-    }
 
     /// Downsamples audio data using RMS (Root Mean Square) for each bucket
     /// This preserves the perceived loudness better than simple averaging
@@ -155,30 +118,5 @@ actor WaveformGenerator {
         vDSP_vsdiv(samples, 1, &divisor, &normalized, 1, vDSP_Length(samples.count))
 
         return normalized
-    }
-}
-
-// MARK: - Waveform Error
-
-enum WaveformError: LocalizedError {
-    case emptyFile
-    case bufferAllocationFailed
-    case noChannelData
-    case invalidData
-    case frameCountTooLarge
-
-    var errorDescription: String? {
-        switch self {
-        case .emptyFile:
-            return "Audio file is empty"
-        case .bufferAllocationFailed:
-            return "Failed to allocate audio buffer"
-        case .noChannelData:
-            return "No channel data available in audio file"
-        case .frameCountTooLarge:
-            return "Audio file length is too large to process"
-        case .invalidData:
-            return "Invalid waveform data"
-        }
     }
 }

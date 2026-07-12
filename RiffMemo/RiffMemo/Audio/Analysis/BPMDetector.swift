@@ -27,56 +27,31 @@ actor BPMDetector {
     func detectBPM(from url: URL) async throws -> Int? {
         Logger.info("Detecting BPM from \(url.lastPathComponent)", category: Logger.audio)
 
-        // Load audio file
-        let audioFile = try AVAudioFile(forReading: url)
-        let format = audioFile.processingFormat
-        let frameCount = AVAudioFrameCount(audioFile.length)
-
-        guard frameCount > 0 else {
-            throw BPMError.emptyFile
-        }
-
-        guard !AudioBufferSafety.exceedsMaxBufferSize(frameCount: frameCount, format: format) else {
-            throw BPMError.frameCountTooLarge
-        }
-
-        // Read audio data
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
-            throw BPMError.bufferAllocationFailed
-        }
-
-        try audioFile.read(into: buffer)
-
-        guard let channelData = buffer.floatChannelData else {
-            throw BPMError.noChannelData
-        }
-
-        // Extract samples from first channel
-        let samples = extractSamples(from: channelData[0], frameCount: Int(buffer.frameLength))
-
-        // Calculate onset strength envelope
-        let onsetEnvelope = calculateOnsetEnvelope(samples: samples, sampleRate: format.sampleRate)
-
-        // Detect tempo using autocorrelation
-        let bpm = detectTempoFromOnsets(
-            onsetEnvelope: onsetEnvelope,
-            sampleRate: format.sampleRate
-        )
+        let loaded = try AudioSampleLoader.load(from: url)
+        let bpm = detectBPM(samples: loaded.samples, sampleRate: loaded.sampleRate)
 
         Logger.info("Detected BPM: \(bpm ?? 0)", category: Logger.audio)
 
         return bpm
     }
 
-    // MARK: - Private Methods
+    /// Detects BPM from pre-loaded samples, skipping the file decode step.
+    /// - Parameters:
+    ///   - samples: Raw, unnormalized first-channel samples.
+    ///   - sampleRate: Sample rate of the source audio.
+    /// - Returns: Detected BPM value, or nil if detection failed
+    func detectBPM(samples: [Float], sampleRate: Double) -> Int? {
+        // Calculate onset strength envelope
+        let onsetEnvelope = calculateOnsetEnvelope(samples: samples, sampleRate: sampleRate)
 
-    private func extractSamples(from channelData: UnsafeMutablePointer<Float>, frameCount: Int) -> [Float] {
-        var samples = [Float](repeating: 0, count: frameCount)
-        for i in 0..<frameCount {
-            samples[i] = channelData[i]
-        }
-        return samples
+        // Detect tempo using autocorrelation
+        return detectTempoFromOnsets(
+            onsetEnvelope: onsetEnvelope,
+            sampleRate: sampleRate
+        )
     }
+
+    // MARK: - Private Methods
 
     /// Calculates onset strength envelope using spectral flux
     private func calculateOnsetEnvelope(samples: [Float], sampleRate: Double) -> [Float] {
@@ -215,27 +190,5 @@ actor BPMDetector {
 
         var divisor = max
         vDSP_vsdiv(array, 1, &divisor, &array, 1, vDSP_Length(array.count))
-    }
-}
-
-// MARK: - BPM Error
-
-enum BPMError: LocalizedError {
-    case emptyFile
-    case bufferAllocationFailed
-    case noChannelData
-    case frameCountTooLarge
-
-    var errorDescription: String? {
-        switch self {
-        case .emptyFile:
-            return "Audio file is empty"
-        case .bufferAllocationFailed:
-            return "Failed to allocate audio buffer"
-        case .noChannelData:
-            return "No channel data available"
-        case .frameCountTooLarge:
-            return "Audio file length is too large to process"
-        }
     }
 }

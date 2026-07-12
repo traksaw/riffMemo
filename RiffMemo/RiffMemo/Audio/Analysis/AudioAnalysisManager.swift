@@ -61,37 +61,31 @@ class AudioAnalysisManager {
 
         var results = AnalysisResults()
 
-        // BPM Detection
-        if options.contains(.bpm) {
-            analysisProgress = 0.1
-            do {
-                results.bpm = try await bpmDetector.detectBPM(from: recording.audioFileURL)
+        do {
+            let loaded = try AudioSampleLoader.load(from: recording.audioFileURL)
+
+            // BPM Detection
+            if options.contains(.bpm) {
+                analysisProgress = 0.1
+                results.bpm = await bpmDetector.detectBPM(samples: loaded.samples, sampleRate: loaded.sampleRate)
                 Logger.info("BPM detected: \(results.bpm ?? 0)", category: Logger.audio)
-            } catch {
-                Logger.error("BPM detection failed: \(error)", category: Logger.audio)
             }
-        }
 
-        // Key Detection
-        if options.contains(.key) {
-            analysisProgress = 0.4
-            do {
-                results.key = try await keyDetector.detectKey(from: recording.audioFileURL)
+            // Key Detection
+            if options.contains(.key) {
+                analysisProgress = 0.4
+                results.key = await keyDetector.detectKey(samples: loaded.samples, sampleRate: loaded.sampleRate)
                 Logger.info("Key detected: \(results.key ?? "Unknown")", category: Logger.audio)
-            } catch {
-                Logger.error("Key detection failed: \(error)", category: Logger.audio)
             }
-        }
 
-        // Quality Analysis
-        if options.contains(.quality) {
-            analysisProgress = 0.7
-            do {
-                results.quality = try await qualityAnalyzer.analyze(from: recording.audioFileURL)
+            // Quality Analysis
+            if options.contains(.quality) {
+                analysisProgress = 0.7
+                results.quality = await qualityAnalyzer.analyze(samples: loaded.samples)
                 Logger.info("Quality: \(results.quality?.quality.rawValue ?? "Unknown")", category: Logger.audio)
-            } catch {
-                Logger.error("Quality analysis failed: \(error)", category: Logger.audio)
             }
+        } catch {
+            Logger.error("Audio decode failed: \(error)", category: Logger.audio)
         }
 
         analysisProgress = 1.0
