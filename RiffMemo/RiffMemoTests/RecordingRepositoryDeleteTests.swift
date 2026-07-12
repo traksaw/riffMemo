@@ -99,4 +99,41 @@ final class RecordingRepositoryDeleteTests: XCTestCase {
             XCTAssertFalse(FileManager.default.fileExists(atPath: recording.audioFileURL.path))
         }
     }
+
+    // MARK: - Staging primitive (the two-phase move that makes delete's
+    // failure handling possible)
+
+    func testStageAudioFileForDeletionMovesFileOutOfPlace() throws {
+        let recording = try makeRecordingWithFile()
+        let originalURL = recording.audioFileURL
+
+        let stagedURL = try repository.stageAudioFileForDeletion(at: originalURL)
+
+        XCTAssertNotNil(stagedURL)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: originalURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: stagedURL!.path))
+        if let stagedURL {
+            createdFileURLs.append(stagedURL)
+        }
+    }
+
+    func testStageAudioFileForDeletionReturnsNilWhenFileAlreadyMissing() throws {
+        let missingURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("WAS50-missing-\(UUID().uuidString).caf")
+
+        let stagedURL = try repository.stageAudioFileForDeletion(at: missingURL)
+
+        XCTAssertNil(stagedURL)
+    }
+
+    // NOTE: The restore-on-failed-save path (delete() moving the staged file
+    // back to originalURL when modelContext.save() throws) is not covered by
+    // an end-to-end test. Forcing a real SwiftData save failure deterministically
+    // isn't reliably possible through the public API — a chmod-based sabotage
+    // attempt on the store's directory was tried and discarded because SQLite's
+    // WAL journaling doesn't need directory write access for an already-open
+    // store, so the save silently succeeded instead of throwing. The two tests
+    // above cover the primitive (stageAudioFileForDeletion) that the restore
+    // path is built from; the restore call itself is a single FileManager
+    // .moveItem in delete()'s catch block, verified by code review.
 }

@@ -51,21 +51,47 @@ class SwiftDataRecordingRepository: RecordingRepository {
     /// file on disk. If a future delete path is added (e.g. a bulk import
     /// rollback), it must route through here or repeat this file cleanup —
     /// otherwise it will silently leak storage the same way WAS-50 did.
+    ///
+    /// The file is staged (moved aside) rather than deleted outright, so if
+    /// the DB save fails afterward (e.g. a CloudKit sync conflict), it can
+    /// be moved back — keeping the still-existing row pointing at a real
+    /// file instead of leaking the opposite way this bug originally did.
     func delete(_ recording: Recording) async throws {
-        try deleteAudioFile(at: recording.audioFileURL)
-        modelContext.delete(recording)
-        try modelContext.save()
+        let originalURL = recording.audioFileURL
+        let stagedURL = try stageAudioFileForDeletion(at: originalURL)
+
+        do {
+            modelContext.delete(recording)
+            try modelContext.save()
+        } catch {
+            if let stagedURL {
+                try? FileManager.default.moveItem(at: stagedURL, to: originalURL)
+            }
+            throw error
+        }
+
+        if let stagedURL {
+            try? FileManager.default.removeItem(at: stagedURL)
+        }
         Logger.info("Recording deleted: \(recording.title)", category: Logger.data)
     }
 
-    /// Removes the file first so a failed deletion leaves the DB row pointing
-    /// at a real file rather than nothing. A missing file (e.g. from a prior
-    /// partial failure) is not a blocking error.
-    private func deleteAudioFile(at url: URL) throws {
+    /// Moves the audio file into a staging directory instead of removing it,
+    /// so a failed DB save can restore it. Returns nil if there was nothing
+    /// to move — a missing file (e.g. from a prior partial failure) is not a
+    /// blocking error.
+    func stageAudioFileForDeletion(at url: URL) throws -> URL? {
+        let stagingDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PendingRecordingDeletes", isDirectory: true)
+        try FileManager.default.createDirectory(at: stagingDirectory, withIntermediateDirectories: true)
+        let stagedURL = stagingDirectory.appendingPathComponent("\(UUID().uuidString)-\(url.lastPathComponent)")
+
         do {
-            try FileManager.default.removeItem(at: url)
+            try FileManager.default.moveItem(at: url, to: stagedURL)
+            return stagedURL
         } catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == NSFileNoSuchFileError {
             Logger.info("Audio file already absent, skipping: \(url.lastPathComponent)", category: Logger.data)
+            return nil
         }
     }
 
