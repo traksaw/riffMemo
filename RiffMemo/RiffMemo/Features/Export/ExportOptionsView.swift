@@ -15,7 +15,7 @@ struct ExportOptionsView: View {
     @State private var selectedFormat: AudioFormat = .m4a
     @State private var selectedQuality: ExportQuality = .high
     @State private var includeMetadata = true
-    @State private var isExporting = false
+    @State private var viewModel = ExportViewModel()
 
     var body: some View {
         NavigationStack {
@@ -110,34 +110,29 @@ struct ExportOptionsView: View {
                     Button(action: {
                         exportAndShare()
                     }) {
-                        if isExporting {
+                        if viewModel.isExporting {
                             ProgressView()
                         } else {
                             Text("Share")
                                 .fontWeight(.semibold)
                         }
                     }
-                    .disabled(isExporting)
+                    .disabled(viewModel.isExporting)
                 }
             }
         }
     }
 
     private func exportAndShare() {
-        isExporting = true
         HapticManager.shared.mediumTap()
 
         Task {
-            let settings = ExportSettings(
+            await viewModel.exportAndShare(
+                recording,
                 format: selectedFormat,
                 quality: selectedQuality,
-                includeMetadata: includeMetadata,
-                metadata: includeMetadata ? ExportMetadata.from(recording) : nil
+                includeMetadata: includeMetadata
             )
-
-            await ShareManager.shared.shareRecording(recording, settings: settings)
-
-            isExporting = false
             dismiss()
         }
     }

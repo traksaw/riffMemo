@@ -217,26 +217,24 @@ struct MetricRow: View {
 
 struct AnalyzeButton: View {
     let recording: Recording
-    @State private var isAnalyzing = false
+    @State private var viewModel = AnalysisViewModel()
 
     var body: some View {
         Button(action: {
-            isAnalyzing = true
             Task {
-                _ = await AudioAnalysisManager.shared.analyzeRecording(recording)
-                isAnalyzing = false
+                await viewModel.analyze(recording)
                 HapticManager.shared.success()
             }
         }) {
             HStack {
-                if isAnalyzing {
+                if viewModel.isAnalyzing {
                     ProgressView()
                         .scaleEffect(0.8)
                 } else {
                     Image(systemName: "waveform.badge.magnifyingglass")
                 }
 
-                Text(isAnalyzing ? "Analyzing..." : "Analyze Audio")
+                Text(viewModel.isAnalyzing ? "Analyzing..." : "Analyze Audio")
                     .fontWeight(.semibold)
             }
             .frame(maxWidth: .infinity)
@@ -245,7 +243,7 @@ struct AnalyzeButton: View {
             .foregroundStyle(.white)
             .cornerRadius(12)
         }
-        .disabled(isAnalyzing)
+        .disabled(viewModel.isAnalyzing)
     }
 }
 
