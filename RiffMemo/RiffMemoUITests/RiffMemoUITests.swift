@@ -195,4 +195,80 @@ final class RiffMemoUITests: XCTestCase {
         // 5. Confirm the app is still fully interactive afterward (proves no NaN froze playback state).
         XCTAssertTrue(waveform.isHittable, "Waveform should remain interactive after the x=0 drag")
     }
+
+    // MARK: - WAS-50 delete-removes-audio-file repro walkthrough
+
+    /// Records a real clip and deletes it via the Library row's swipe action, confirming
+    /// it disappears from the list. XCUITest runs out-of-process from the app under test
+    /// and can't read its sandboxed Documents directory directly, so the "did the .caf
+    /// file actually get removed from disk" half of WAS-50 is verified separately, from
+    /// outside this test, by diffing the app's Documents directory (via
+    /// `simctl get_app_container`) before and after this test runs.
+    @MainActor
+    func testDeletingRecordingRemovesItFromLibrary() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        func screenshot(_ name: String) {
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+
+        // 1. Record a short clip.
+        app.tabBars.buttons["Record"].tap()
+        let recordButton = app.buttons["recordButton"]
+        XCTAssertTrue(recordButton.waitForExistence(timeout: 10))
+        recordButton.tap()
+        XCTAssertTrue(app.staticTexts["Recording..."].waitForExistence(timeout: 10), "Recording should start")
+
+        Thread.sleep(forTimeInterval: 2)
+
+        recordButton.tap()
+        XCTAssertTrue(app.staticTexts["Tap to Record"].waitForExistence(timeout: 10), "Recording should stop")
+        screenshot("01-recorded-clip")
+
+        // 2. Go to Library and confirm the new recording landed there.
+        app.tabBars.buttons["Library"].tap()
+        let recordingRow = app.descendants(matching: .any)["recordingRow"].firstMatch
+        XCTAssertTrue(recordingRow.waitForExistence(timeout: 10), "The recording we just made should appear in the Library")
+        let rowCountBeforeDelete = app.descendants(matching: .any).matching(identifier: "recordingRow").count
+        screenshot("02-library-before-delete")
+
+        // 3. Swipe to delete it (Library sorts newest-first, so our clip is the first row).
+        // The row's trailing swipe action has allowsFullSwipe: true, so a full-width drag
+        // triggers the destructive action directly - there's no separate "Delete" button to
+        // wait for and tap afterward (confirmed by inspecting the post-swipe accessibility
+        // tree: the row was already gone). A plain .swipeLeft() didn't reliably trigger this
+        // in this environment, so use the same press-then-dragTo coordinate gesture this file
+        // already relies on elsewhere for gesture-sensitive SwiftUI elements (see the waveform
+        // drag above).
+        let rowTrailingEdge = recordingRow.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
+        let rowLeadingEdge = recordingRow.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5))
+        rowTrailingEdge.press(forDuration: 0.05, thenDragTo: rowLeadingEdge)
+        screenshot("03-swiped-to-delete")
+
+        // 4. Confirm it's gone: empty state if it was the only recording, otherwise one fewer row.
+        if rowCountBeforeDelete == 1 {
+            XCTAssertTrue(
+                app.staticTexts["No Recordings Yet"].waitForExistence(timeout: 10),
+                "Deleting the only recording should show the empty state"
+            )
+        } else {
+            let rowsAfterDelete = app.descendants(matching: .any).matching(identifier: "recordingRow")
+            let expectation = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "count == %d", rowCountBeforeDelete - 1),
+                object: rowsAfterDelete
+            )
+            XCTAssertEqual(
+                XCTWaiter().wait(for: [expectation], timeout: 10),
+                .completed,
+                "Row count should decrease by one after delete"
+            )
+        }
+        screenshot("04-recording-removed-from-library")
+
+        XCTAssertEqual(app.state, .runningForeground, "App must not crash on delete (WAS-50)")
+    }
 }
