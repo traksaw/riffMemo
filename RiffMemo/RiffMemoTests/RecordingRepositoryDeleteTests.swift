@@ -126,14 +126,52 @@ final class RecordingRepositoryDeleteTests: XCTestCase {
         XCTAssertNil(stagedURL)
     }
 
-    // NOTE: The restore-on-failed-save path (delete() moving the staged file
-    // back to originalURL when modelContext.save() throws) is not covered by
-    // an end-to-end test. Forcing a real SwiftData save failure deterministically
-    // isn't reliably possible through the public API — a chmod-based sabotage
-    // attempt on the store's directory was tried and discarded because SQLite's
-    // WAL journaling doesn't need directory write access for an already-open
-    // store, so the save silently succeeded instead of throwing. The two tests
-    // above cover the primitive (stageAudioFileForDeletion) that the restore
-    // path is built from; the restore call itself is a single FileManager
-    // .moveItem in delete()'s catch block, verified by code review.
+    // MARK: - Restore on a failed DB save
+
+    private struct InjectedSaveFailure: Error {}
+
+    /// A chmod-based attempt to force a *real* SwiftData save failure was
+    /// tried and discarded (SQLite's WAL journaling doesn't need directory
+    /// write access for an already-open store, so the save silently
+    /// succeeded instead of throwing). Injecting the save call itself is the
+    /// reliable way to exercise this path deterministically.
+    func testDeleteRestoresFileWhenDatabaseSaveFails() async throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Recording.self, configurations: configuration)
+        Self.leakedToAvoidToolchainDeinitCrash.append(container)
+
+        let savingRepository = SwiftDataRecordingRepository(modelContext: container.mainContext)
+        Self.leakedToAvoidToolchainDeinitCrash.append(savingRepository)
+
+        let recording = try makeRecordingWithFile()
+        try await savingRepository.save(recording)
+
+        let failingRepository = SwiftDataRecordingRepository(
+            modelContext: container.mainContext,
+            performSave: { throw InjectedSaveFailure() }
+        )
+        Self.leakedToAvoidToolchainDeinitCrash.append(failingRepository)
+
+        do {
+            try await failingRepository.delete(recording)
+            XCTFail("Expected delete to propagate the injected save failure")
+        } catch is InjectedSaveFailure {
+            // expected
+        }
+
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: recording.audioFileURL.path),
+            "Audio file should be restored after a failed DB save"
+        )
+
+        // container.mainContext still has the delete queued as an unsaved
+        // pending change, which taints fetches on that same context. Verify
+        // against a fresh context instead — the same thing a relaunched app
+        // would see reading the actually-persisted store.
+        let freshRepository = SwiftDataRecordingRepository(modelContext: ModelContext(container))
+        Self.leakedToAvoidToolchainDeinitCrash.append(freshRepository)
+
+        let fetched = try await freshRepository.fetch(by: recording.id)
+        XCTAssertNotNil(fetched, "DB row should still exist in the persisted store after a failed save")
+    }
 }

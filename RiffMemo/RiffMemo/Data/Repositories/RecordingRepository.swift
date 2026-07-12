@@ -23,8 +23,14 @@ class SwiftDataRecordingRepository: RecordingRepository {
 
     private let modelContext: ModelContext
 
-    init(modelContext: ModelContext) {
+    /// The actual `modelContext.save()` call, indirected so tests can inject
+    /// a failing save to exercise delete()'s restore-on-failure path — real
+    /// SwiftData save failures aren't reliably forceable from outside.
+    private let performSave: () throws -> Void
+
+    init(modelContext: ModelContext, performSave: (() throws -> Void)? = nil) {
         self.modelContext = modelContext
+        self.performSave = performSave ?? { try modelContext.save() }
     }
 
     func fetchAll() async throws -> [Recording] {
@@ -43,7 +49,7 @@ class SwiftDataRecordingRepository: RecordingRepository {
 
     func save(_ recording: Recording) async throws {
         modelContext.insert(recording)
-        try modelContext.save()
+        try performSave()
         Logger.info("Recording saved: \(recording.title)", category: Logger.data)
     }
 
@@ -62,7 +68,7 @@ class SwiftDataRecordingRepository: RecordingRepository {
 
         do {
             modelContext.delete(recording)
-            try modelContext.save()
+            try performSave()
         } catch {
             if let stagedURL {
                 try? FileManager.default.moveItem(at: stagedURL, to: originalURL)
@@ -97,7 +103,7 @@ class SwiftDataRecordingRepository: RecordingRepository {
 
     func update(_ recording: Recording) async throws {
         recording.modifiedDate = Date()
-        try modelContext.save()
+        try performSave()
         Logger.info("Recording updated: \(recording.title)", category: Logger.data)
     }
 }
