@@ -20,34 +20,18 @@ actor AudioQualityAnalyzer {
     func analyze(from url: URL) async throws -> AudioQualityMetrics {
         Logger.info("Analyzing audio quality from \(url.lastPathComponent)", category: Logger.audio)
 
-        // Load audio file
-        let audioFile = try AVAudioFile(forReading: url)
-        let format = audioFile.processingFormat
-        let frameCount = AVAudioFrameCount(audioFile.length)
+        let loaded = try AudioSampleLoader.load(from: url)
+        let metrics = analyze(samples: loaded.samples)
 
-        guard frameCount > 0 else {
-            throw QualityAnalysisError.emptyFile
-        }
+        Logger.info("Quality analysis complete: \(metrics.quality)", category: Logger.audio)
 
-        guard !AudioBufferSafety.exceedsMaxBufferSize(frameCount: frameCount, format: format) else {
-            throw QualityAnalysisError.frameCountTooLarge
-        }
+        return metrics
+    }
 
-        // Read audio data
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
-            throw QualityAnalysisError.bufferAllocationFailed
-        }
-
-        try audioFile.read(into: buffer)
-
-        guard let channelData = buffer.floatChannelData else {
-            throw QualityAnalysisError.noChannelData
-        }
-
-        // Extract samples
-        let samples = extractSamples(from: channelData[0], frameCount: Int(buffer.frameLength))
-
-        // Calculate metrics
+    /// Analyzes audio quality from pre-loaded samples, skipping the file decode step.
+    /// - Parameter samples: Raw, unnormalized first-channel samples.
+    /// - Returns: Audio quality metrics
+    func analyze(samples: [Float]) -> AudioQualityMetrics {
         let peakLevel = calculatePeakLevel(samples: samples)
         let rmsLevel = calculateRMS(samples: samples)
         let dynamicRange = calculateDynamicRange(samples: samples)
@@ -55,7 +39,7 @@ actor AudioQualityAnalyzer {
         let silenceRatio = calculateSilenceRatio(samples: samples)
         let clippingDetected = detectClipping(samples: samples)
 
-        let metrics = AudioQualityMetrics(
+        return AudioQualityMetrics(
             peakLevel: peakLevel,
             rmsLevel: rmsLevel,
             dynamicRange: dynamicRange,
@@ -69,21 +53,9 @@ actor AudioQualityAnalyzer {
                 clippingDetected: clippingDetected
             )
         )
-
-        Logger.info("Quality analysis complete: \(metrics.quality)", category: Logger.audio)
-
-        return metrics
     }
 
     // MARK: - Private Methods
-
-    private func extractSamples(from channelData: UnsafeMutablePointer<Float>, frameCount: Int) -> [Float] {
-        var samples = [Float](repeating: 0, count: frameCount)
-        for i in 0..<frameCount {
-            samples[i] = channelData[i]
-        }
-        return samples
-    }
 
     /// Calculates peak level in dB
     private func calculatePeakLevel(samples: [Float]) -> Double {
@@ -230,28 +202,6 @@ enum AudioQuality: String, Codable {
         case .good: return "blue"
         case .fair: return "orange"
         case .poor: return "red"
-        }
-    }
-}
-
-// MARK: - Quality Analysis Error
-
-enum QualityAnalysisError: LocalizedError {
-    case emptyFile
-    case bufferAllocationFailed
-    case noChannelData
-    case frameCountTooLarge
-
-    var errorDescription: String? {
-        switch self {
-        case .emptyFile:
-            return "Audio file is empty"
-        case .bufferAllocationFailed:
-            return "Failed to allocate audio buffer"
-        case .noChannelData:
-            return "No channel data available"
-        case .frameCountTooLarge:
-            return "Audio file length is too large to process"
         }
     }
 }

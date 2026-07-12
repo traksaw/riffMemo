@@ -32,56 +32,31 @@ actor KeyDetector {
     func detectKey(from url: URL) async throws -> String? {
         Logger.info("Detecting key from \(url.lastPathComponent)", category: Logger.audio)
 
-        // Load audio file
-        let audioFile = try AVAudioFile(forReading: url)
-        let format = audioFile.processingFormat
-        let frameCount = AVAudioFrameCount(audioFile.length)
-
-        guard frameCount > 0 else {
-            throw KeyDetectionError.emptyFile
-        }
-
-        guard !AudioBufferSafety.exceedsMaxBufferSize(frameCount: frameCount, format: format) else {
-            throw KeyDetectionError.frameCountTooLarge
-        }
-
-        // Read audio data
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
-            throw KeyDetectionError.bufferAllocationFailed
-        }
-
-        try audioFile.read(into: buffer)
-
-        guard let channelData = buffer.floatChannelData else {
-            throw KeyDetectionError.noChannelData
-        }
-
-        // Extract samples
-        let samples = extractSamples(from: channelData[0], frameCount: Int(buffer.frameLength))
-
-        // Calculate pitch class profile
-        let pitchClassProfile = calculatePitchClassProfile(
-            samples: samples,
-            sampleRate: format.sampleRate
-        )
-
-        // Detect key using Krumhansl-Schmuckler algorithm
-        let key = detectKeyFromProfile(pitchClassProfile)
+        let loaded = try AudioSampleLoader.load(from: url)
+        let key = detectKey(samples: loaded.samples, sampleRate: loaded.sampleRate)
 
         Logger.info("Detected key: \(key ?? "Unknown")", category: Logger.audio)
 
         return key
     }
 
-    // MARK: - Private Methods
+    /// Detects musical key from pre-loaded samples, skipping the file decode step.
+    /// - Parameters:
+    ///   - samples: Raw, unnormalized first-channel samples.
+    ///   - sampleRate: Sample rate of the source audio.
+    /// - Returns: Detected key (e.g., "C Major", "A Minor"), or nil if detection failed
+    func detectKey(samples: [Float], sampleRate: Double) -> String? {
+        // Calculate pitch class profile
+        let pitchClassProfile = calculatePitchClassProfile(
+            samples: samples,
+            sampleRate: sampleRate
+        )
 
-    private func extractSamples(from channelData: UnsafeMutablePointer<Float>, frameCount: Int) -> [Float] {
-        var samples = [Float](repeating: 0, count: frameCount)
-        for i in 0..<frameCount {
-            samples[i] = channelData[i]
-        }
-        return samples
+        // Detect key using Krumhansl-Schmuckler algorithm
+        return detectKeyFromProfile(pitchClassProfile)
     }
+
+    // MARK: - Private Methods
 
     /// Calculates pitch class profile (chromagram)
     private func calculatePitchClassProfile(samples: [Float], sampleRate: Double) -> [Double] {
@@ -248,27 +223,5 @@ actor KeyDetector {
         let normalizedOffset = ((offset % count) + count) % count
 
         return Array(array[normalizedOffset..<count] + array[0..<normalizedOffset])
-    }
-}
-
-// MARK: - Key Detection Error
-
-enum KeyDetectionError: LocalizedError {
-    case emptyFile
-    case bufferAllocationFailed
-    case noChannelData
-    case frameCountTooLarge
-
-    var errorDescription: String? {
-        switch self {
-        case .emptyFile:
-            return "Audio file is empty"
-        case .bufferAllocationFailed:
-            return "Failed to allocate audio buffer"
-        case .noChannelData:
-            return "No channel data available"
-        case .frameCountTooLarge:
-            return "Audio file length is too large to process"
-        }
     }
 }
