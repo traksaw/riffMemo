@@ -45,7 +45,9 @@ struct LibraryView: View {
                         ForEach(viewModel.recordings) { recording in
                             if isSelectionMode {
                                 // Selection mode - no navigation
-                                RecordingRow(recording: recording)
+                                RecordingRow(recording: recording, onRename: { newTitle in
+                                    Task { await viewModel.renameRecording(recording, to: newTitle) }
+                                })
                                     .tag(recording.id)
                             } else {
                                 // Normal mode - with navigation
@@ -58,7 +60,9 @@ struct LibraryView: View {
                                         )
                                     )
                                 } label: {
-                                    RecordingRow(recording: recording)
+                                    RecordingRow(recording: recording, onRename: { newTitle in
+                                        Task { await viewModel.renameRecording(recording, to: newTitle) }
+                                    })
                                 }
                                 .accessibilityIdentifier("recordingRow")
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -234,7 +238,7 @@ struct LibraryView: View {
                 }
                 Button("Delete \(selectedRecordings.count)", role: .destructive) {
                     Task {
-                        await deleteSelectedRecordings()
+                        await viewModel.deleteRecordings(withIDs: selectedRecordings)
                         HapticManager.shared.success()
                         editMode = .inactive
                         selectedRecordings.removeAll()
@@ -246,30 +250,13 @@ struct LibraryView: View {
         }
     }
 
-    // MARK: - Helper Methods
-
-    private func deleteSelectedRecordings() async {
-        let recordingsToDelete = viewModel.recordings.filter { selectedRecordings.contains($0.id) }
-
-        Logger.info("Deleting \(recordingsToDelete.count) selected recordings", category: Logger.data)
-
-        for recording in recordingsToDelete {
-            do {
-                try await viewModel.repository.delete(recording)
-            } catch {
-                Logger.error("Failed to delete recording \(recording.title): \(error)", category: Logger.data)
-            }
-        }
-
-        await viewModel.loadRecordings()
-        Logger.info("Deleted selected recordings", category: Logger.data)
-    }
 }
 
 // MARK: - Recording Row
 
 struct RecordingRow: View {
     let recording: Recording
+    let onRename: (String) -> Void
     @State private var isEditing = false
     @State private var editedTitle = ""
 
@@ -283,7 +270,7 @@ struct RecordingRow: View {
                         .font(.headline)
                         .onSubmit {
                             if !editedTitle.isEmpty {
-                                recording.title = editedTitle
+                                onRename(editedTitle)
                             }
                             isEditing = false
                         }
