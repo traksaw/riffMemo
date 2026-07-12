@@ -15,21 +15,20 @@ struct BatchExportView: View {
     @State private var selectedFormat: AudioFormat = .m4a
     @State private var selectedQuality: ExportQuality = .high
     @State private var includeMetadata = true
-    @State private var isExporting = false
-    @State private var exportProgress: Double = 0
+    @State private var viewModel = ExportViewModel()
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 // Export Progress
-                if isExporting {
+                if viewModel.isExporting {
                     VStack(spacing: 12) {
-                        ProgressView(value: exportProgress) {
+                        ProgressView(value: viewModel.exportProgress) {
                             HStack {
                                 Text("Exporting...")
                                     .font(.headline)
                                 Spacer()
-                                Text("\(Int(exportProgress * 100))%")
+                                Text("\(Int(viewModel.exportProgress * 100))%")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                                     .monospacedDigit()
@@ -119,21 +118,21 @@ struct BatchExportView: View {
                     Button("Cancel") {
                         dismiss()
                     }
-                    .disabled(isExporting)
+                    .disabled(viewModel.isExporting)
                 }
 
                 ToolbarItem(placement: .primaryAction) {
                     Button(action: {
                         exportAll()
                     }) {
-                        if isExporting {
+                        if viewModel.isExporting {
                             ProgressView()
                         } else {
                             Text("Export All")
                                 .fontWeight(.semibold)
                         }
                     }
-                    .disabled(isExporting)
+                    .disabled(viewModel.isExporting)
                 }
             }
         }
@@ -148,25 +147,16 @@ struct BatchExportView: View {
     }
 
     private func exportAll() {
-        isExporting = true
-        exportProgress = 0
         HapticManager.shared.mediumTap()
 
         Task {
-            let settings = ExportSettings(
+            await viewModel.exportAll(
+                recordings,
                 format: selectedFormat,
                 quality: selectedQuality,
-                includeMetadata: includeMetadata,
-                metadata: nil
+                includeMetadata: includeMetadata
             )
-
-            await ShareManager.shared.shareMultipleRecordings(
-                recordings,
-                settings: settings
-            )
-
             HapticManager.shared.success()
-            isExporting = false
             dismiss()
         }
     }

@@ -23,8 +23,20 @@ class LibraryViewModel {
 
     // MARK: - Dependencies
 
-    let repository: RecordingRepository
+    /// Private so a View can never reach past the ViewModel to mutate persistence
+    /// directly (WAS-59) — the `private` keyword is the enforcement: any View code
+    /// that writes `viewModel.repository...` fails to compile. Route all data
+    /// operations through ViewModel methods instead.
+    private let repository: RecordingRepository
     private let waveformGenerator = WaveformGenerator()
+
+    #if DEBUG
+    /// Test-only seam: lets LibraryViewModelTests save fixtures without
+    /// making `repository` non-private for production code.
+    func saveForTest(_ recording: Recording) async throws {
+        try await repository.save(recording)
+    }
+    #endif
 
     // MARK: - Initialization
 
@@ -56,21 +68,48 @@ class LibraryViewModel {
     }
 
     func deleteAllRecordings() async {
-        let count = recordings.count
-        guard count > 0 else { return }
+        guard !recordings.isEmpty else { return }
 
-        Logger.info("Deleting all \(count) recordings", category: Logger.data)
+        Logger.info("Deleting all \(recordings.count) recordings", category: Logger.data)
+        await deleteRecordings(recordings)
+        Logger.info("Deleted all recordings", category: Logger.data)
+    }
 
-        for recording in recordings {
+    /// Deletes the recordings whose id is in `ids`. Used by the Library's
+    /// multi-select "Delete" action; kept separate from `deleteAllRecordings`
+    /// only because the two log different messages.
+    func deleteRecordings(withIDs ids: Set<Recording.ID>) async {
+        let recordingsToDelete = recordings.filter { ids.contains($0.id) }
+        guard !recordingsToDelete.isEmpty else { return }
+
+        Logger.info("Deleting \(recordingsToDelete.count) selected recordings", category: Logger.data)
+        await deleteRecordings(recordingsToDelete)
+        Logger.info("Deleted selected recordings", category: Logger.data)
+    }
+
+    private func deleteRecordings(_ recordingsToDelete: [Recording]) async {
+        for recording in recordingsToDelete {
             do {
                 try await repository.delete(recording)
             } catch {
                 Logger.error("Failed to delete recording \(recording.title): \(error)", category: Logger.data)
             }
         }
-
         await loadRecordings()
-        Logger.info("Deleted all recordings", category: Logger.data)
+    }
+
+    /// Renames a recording through the repository (not a direct `recording.title =`
+    /// mutation from a View) so the change is persisted via the same path CloudKit
+    /// sync relies on (WAS-51).
+    func renameRecording(_ recording: Recording, to newTitle: String) async {
+        guard !newTitle.isEmpty else { return }
+        recording.title = newTitle
+        do {
+            try await repository.update(recording)
+            Logger.info("Renamed recording to: \(newTitle)", category: Logger.data)
+        } catch {
+            Logger.error("Failed to rename recording: \(error)", category: Logger.data)
+        }
     }
 
     func toggleFavorite(_ recording: Recording) async {

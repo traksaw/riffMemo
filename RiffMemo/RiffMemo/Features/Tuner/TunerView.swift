@@ -9,7 +9,6 @@ import SwiftUI
 
 struct TunerView: View {
     @StateObject private var pitchDetector = PitchDetector()
-    @State private var isActive = false
 
     var body: some View {
         NavigationStack {
@@ -68,16 +67,16 @@ struct TunerView: View {
                         toggleTuner()
                     }) {
                         HStack(spacing: 12) {
-                            Image(systemName: isActive ? "stop.circle.fill" : "play.circle.fill")
+                            Image(systemName: pitchDetector.isDetecting ? "stop.circle.fill" : "play.circle.fill")
                                 .font(.title2)
 
-                            Text(isActive ? "Stop" : "Start Tuner")
+                            Text(pitchDetector.isDetecting ? "Stop" : "Start Tuner")
                                 .font(.title3)
                                 .fontWeight(.semibold)
                         }
                         .frame(maxWidth: 300)
                         .padding()
-                        .background(isActive ? Color.red : Color.blue)
+                        .background(pitchDetector.isDetecting ? Color.red : Color.blue)
                         .foregroundColor(.white)
                         .cornerRadius(16)
                         .shadow(radius: 8)
@@ -92,10 +91,8 @@ struct TunerView: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .onDisappear {
-            if isActive {
-                Task {
-                    await pitchDetector.stopDetection()
-                }
+            Task {
+                await pitchDetector.stopDetection()
             }
         }
     }
@@ -123,14 +120,12 @@ struct TunerView: View {
 
     private func toggleTuner() {
         Task {
-            if isActive {
+            if pitchDetector.isDetecting {
                 await pitchDetector.stopDetection()
-                isActive = false
                 HapticManager.shared.lightTap()
             } else {
                 do {
                     try await pitchDetector.startDetection()
-                    isActive = true
                     HapticManager.shared.mediumTap()
                 } catch {
                     Logger.error("Failed to start tuner: \(error)", category: Logger.audio)
