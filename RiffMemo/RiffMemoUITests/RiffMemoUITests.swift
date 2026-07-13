@@ -146,9 +146,11 @@ final class RiffMemoUITests: XCTestCase {
         app.tabBars.buttons["Library"].tap()
         let recordingRow = app.descendants(matching: .any)["recordingRow"].firstMatch
         XCTAssertTrue(recordingRow.waitForExistence(timeout: 10), "The recording we just made should appear in the Library")
-        // The row combines a title, an edit pencil, and its own interactive waveform thumbnail
-        // into one accessibility element; a plain .tap() lands ambiguously. Target the title
-        // text specifically, away from both the pencil (trailing edge) and the thumbnail
+        // The row's NavigationLink combines its title and edit pencil into one accessibility
+        // element (the waveform thumbnail is excluded via .accessibilityHidden, see WAS-87), but
+        // a plain .tap() still lands ambiguously because the thumbnail's gesture recognizers
+        // intercept raw touches regardless of accessibility state (WAS-59 territory). Target the
+        // title text specifically, away from both the pencil (trailing edge) and the thumbnail
         // (lower half) - same workaround this file already uses for clickTrackToggle above.
         recordingRow.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.12)).tap()
 
