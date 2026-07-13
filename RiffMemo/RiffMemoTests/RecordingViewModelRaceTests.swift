@@ -42,6 +42,34 @@ final class RecordingViewModelRaceTests: XCTestCase {
     /// round-trip completes. The fix added a synchronous `isStoppingRecording` flag set before
     /// that round-trip starts — verified here by calling stopRecording() twice back-to-back
     /// (before either has a chance to complete) and confirming the recorder only saw one call.
+    /// Root cause of the intermittent "recording never appears in Library" UI test failure
+    /// (testDeletingRecordingRemovesItFromLibrary / testWaveformScrubbingTracksFingerAbsolutePosition):
+    /// `isRecording` used to flip to `false` — which drives the "Tap to Record" text the UI
+    /// tests treat as their synchronization signal — BEFORE `repository.save(_:)` completed.
+    /// `LibraryView` fetches its list once per tab visit with no live-refresh, so a caller
+    /// (a real user, or a UI test) that reacts to `isRecording == false` by immediately
+    /// switching to Library can race the still-in-flight save and permanently miss the row —
+    /// not just see it late. `isRecording` must not become `false` until the recording is
+    /// durably persisted.
+    func testIsRecordingStaysTrueUntilTheRecordingIsPersisted() async throws {
+        let (viewModel, _, repository) = makeViewModel()
+        repository.saveDelayNanoseconds = 200_000_000 // simulate a slow SwiftData write
+
+        viewModel.startRecording()
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertTrue(viewModel.isRecording)
+
+        viewModel.stopRecording()
+        try await Task.sleep(nanoseconds: 50_000_000) // well before the simulated save completes
+
+        XCTAssertTrue(viewModel.isRecording, "isRecording must stay true while repository.save(_:) is still in flight")
+        XCTAssertTrue(repository.savedRecordings.isEmpty)
+
+        try await Task.sleep(nanoseconds: 300_000_000) // let the save finish
+        XCTAssertFalse(viewModel.isRecording)
+        XCTAssertEqual(repository.savedRecordings.count, 1)
+    }
+
     func testDoubleStopOnlyInvokesTheRecorderOnce() async throws {
         let (viewModel, recorder, _) = makeViewModel()
 

@@ -12,6 +12,10 @@ import Foundation
 final class MockRecordingRepository: RecordingRepository, @unchecked Sendable {
     private(set) var savedRecordings: [Recording] = []
     var saveError: Error?
+    /// Simulates real SwiftData disk-write latency so tests can observe state while a save is
+    /// still in flight (e.g. to prove `isRecording` doesn't flip to `false` before persistence
+    /// actually completes).
+    var saveDelayNanoseconds: UInt64 = 0
 
     func fetchAll() async throws -> [Recording] {
         savedRecordings
@@ -22,6 +26,9 @@ final class MockRecordingRepository: RecordingRepository, @unchecked Sendable {
     }
 
     func save(_ recording: Recording) async throws {
+        if saveDelayNanoseconds > 0 {
+            try await Task.sleep(nanoseconds: saveDelayNanoseconds)
+        }
         if let saveError {
             throw saveError
         }

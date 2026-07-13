@@ -132,6 +132,14 @@ class RecordingViewModel {
                     recordedWithBPM: recordingBPM,
                     recordedWithTimeSignature: recordingTimeSignature
                 )
+
+                try await repository.save(recording)
+                Logger.info("Recording stopped and saved with duration: \(duration)s", category: Logger.audio)
+
+                // Only flip to "stopped" once the recording is durably persisted — a caller
+                // reacting to isRecording==false (e.g. immediately switching to the Library tab,
+                // which fetches its list once per visit with no live-refresh) must be able to
+                // rely on the recording already being queryable, not racing an in-flight save.
                 isRecording = false
                 currentDuration = 0
                 audioLevel = 0 // Reset audio level
@@ -139,9 +147,6 @@ class RecordingViewModel {
                 // Reset metronome settings for next recording
                 recordingBPM = nil
                 recordingTimeSignature = nil
-
-                try await repository.save(recording)
-                Logger.info("Recording stopped and saved with duration: \(duration)s", category: Logger.audio)
 
                 // Queue automatic analysis
                 AudioAnalysisManager.shared.queueAnalysis(recording)
