@@ -23,14 +23,14 @@ A native iOS app for musicians to capture, analyze, and organize musical ideas �
 ## Engineering Highlights
 
 - **Custom on-device DSP** — BPM, key, and pitch detection are implemented from scratch (`Audio/Analysis/`) rather than pulled from a third-party library, running entirely on-device with no network round-trip.
-- **Testable audio layer** — recording, playback, and analysis live behind manager/repository interfaces, so view models are unit-tested with `XCTest` without touching AVFoundation or a simulator's microphone.
-- **Clear separation of concerns** — MVVM + Coordinator throughout: views own presentation, `@Observable` view models own state, coordinators own navigation. No feature reaches into another feature's internals.
+- **Testable core flows** — `RecordingViewModel` and `LibraryViewModel` depend on protocol-mocked audio/data interfaces (`AudioRecorderProtocol`, `RecordingRepository`), so their state-machine and race-condition logic is unit-tested with `XCTest` without touching AVFoundation or a simulator's microphone; the remaining view models don't yet have dedicated test coverage.
+- **Clear separation of concerns** — MVVM throughout: views own presentation, `@Observable` view models own state. No feature reaches into another feature's internals.
 - **CI on every change** — GitHub Actions builds and runs the test suite on every push and pull request against `main`, catching regressions before merge.
 
 ## Tech Stack
 
 - **Platform**: iOS (Swift, SwiftUI)
-- **Architecture**: MVVM + Coordinator pattern
+- **Architecture**: MVVM
 - **Audio**: AVFoundation / AVAudioEngine for recording and playback, custom DSP for BPM/key/pitch detection
 - **Persistence**: SwiftData with CloudKit sync
 - **CI**: GitHub Actions — automated build and test on every push/PR ([workflow](.github/workflows))
@@ -40,7 +40,7 @@ A native iOS app for musicians to capture, analyze, and organize musical ideas �
 
 ```
 RiffMemo/
-├── App/                    # App entry point, root coordinator, tab navigation
+├── App/                    # App entry point, tab navigation (MainTabView)
 ├── Core/                   # Shared utilities, extensions, logging, sharing, haptics
 ├── Features/                # SwiftUI views + view models, one folder per feature
 │   ├── Recording/          # Recording flow, live waveform, spectrum visualization
@@ -65,7 +65,7 @@ RiffMemo/
 └── Resources/                 # Assets, localization
 ```
 
-Each feature follows the same shape: a SwiftUI `View`, an `@Observable` `ViewModel` for state and business logic, and a `Coordinator` for navigation. The audio engine and data layers are isolated behind repositories/managers so the UI never talks to AVFoundation or SwiftData directly — this keeps the view models unit-testable without a simulator.
+Each feature follows the same shape: a SwiftUI `View` and an `@Observable` `ViewModel` for state and business logic; navigation is handled directly with SwiftUI's `TabView`/`NavigationStack`/sheets rather than a dedicated Coordinator layer. The audio engine and data layers are isolated behind repositories/managers so the UI never talks to AVFoundation or SwiftData directly — `RecordingViewModel` and `LibraryViewModel` in particular are unit-tested against protocol mocks rather than the real engine.
 
 ## Getting Started
 
