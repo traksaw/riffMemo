@@ -52,6 +52,7 @@ struct RecordingDetailView: View {
                     )
                     .frame(height: 120)
                     .accessibilityIdentifier("waveformView")
+                    .accessibilityLabel("Waveform scrubber")
                 } else {
                     WaveformPlaceholder()
                         .frame(height: 120)
