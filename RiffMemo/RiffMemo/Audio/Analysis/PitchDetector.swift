@@ -37,7 +37,12 @@ class PitchDetector: ObservableObject {
     private var inputNode: AVAudioInputNode?
 
     // Reused across tap callbacks so the render thread doesn't allocate a new array every buffer.
-    private var sampleBuffer: [Float] = []
+    // `nonisolated(unsafe)`: written from processBuffer(_:sampleRate:), which — like the rest of
+    // this class's tap-driven path — runs synchronously on Core Audio's real-time thread, not
+    // hopped onto the MainActor. Matches the same documented pattern used for the render-thread
+    // callback properties in AudioRecordingManager. Safe because Core Audio serializes tap
+    // callbacks (never concurrent), so there is exactly one writer at a time.
+    private nonisolated(unsafe) var sampleBuffer: [Float] = []
 
     // MARK: - Public Methods
 
@@ -103,7 +108,7 @@ class PitchDetector: ObservableObject {
         fillSampleBuffer(from: channelData[0], count: frameLength)
 
         // Detect pitch using autocorrelation
-        if let detectedFreq = detectPitch(samples: sampleBuffer, sampleRate: sampleRate) {
+        if let detectedFreq = Self.detectPitch(samples: sampleBuffer, sampleRate: sampleRate) {
             Task { @MainActor in
                 self.frequency = detectedFreq
                 self.updateNoteAndCents(from: detectedFreq)
@@ -122,8 +127,10 @@ class PitchDetector: ObservableObject {
         }
     }
 
-    /// Detects pitch using autocorrelation
-    private func detectPitch(samples: [Float], sampleRate: Double) -> Double? {
+    /// Detects pitch using autocorrelation. A pure function of its arguments (touches no
+    /// instance state) — kept `static` so it's testable without allocating/deallocating a
+    /// full `@MainActor` `PitchDetector` instance.
+    static func detectPitch(samples: [Float], sampleRate: Double) -> Double? {
         let minFreq: Double = 80.0  // ~E2
         let maxFreq: Double = 1200.0 // ~D6
 
@@ -139,22 +146,27 @@ class PitchDetector: ObservableObject {
         // threshold used to gate on. Require a minimum average per-sample energy first; digital
         // silence is exactly 0 and typical mic self-/room-noise sits well below this, chosen
         // conservatively so real playing (even quiet) still passes.
-        let averageEnergy = samples.reduce(Float(0)) { $0 + $1 * $1 } / Float(samples.count)
+        var averageEnergy: Float = 0
+        vDSP_svesq(samples, 1, &averageEnergy, vDSP_Length(samples.count))
+        averageEnergy /= Float(samples.count)
         guard averageEnergy > PitchDetector.minimumAverageEnergy else { return nil }
 
-        // Calculate autocorrelation
+        // Calculate autocorrelation. Vectorized (vDSP_dotpr) rather than a scalar Swift loop —
+        // this runs on the real-time render thread for every buffer, same reasoning
+        // AudioQualityAnalyzer already uses vDSP for its sum-of-squares work.
         var maxCorr: Float = 0
         var bestPeriod = minPeriod
 
-        for period in minPeriod...maxPeriod {
-            var corr: Float = 0
-            for i in 0..<(samples.count - period) {
-                corr += samples[i] * samples[i + period]
-            }
+        samples.withUnsafeBufferPointer { buf in
+            let base = buf.baseAddress!
+            for period in minPeriod...maxPeriod {
+                var corr: Float = 0
+                vDSP_dotpr(base, 1, base + period, 1, &corr, vDSP_Length(samples.count - period))
 
-            if corr > maxCorr {
-                maxCorr = corr
-                bestPeriod = period
+                if corr > maxCorr {
+                    maxCorr = corr
+                    bestPeriod = period
+                }
             }
         }
 
@@ -163,8 +175,14 @@ class PitchDetector: ObservableObject {
         // — otherwise a fixed 0.1 cutoff on the raw correlation sum makes sensitivity swing
         // with input loudness (quiet playing never crosses it, loud playing crosses it trivially).
         var energy: Float = 0
-        for i in 0..<(samples.count - bestPeriod) {
-            energy += samples[i] * samples[i] + samples[i + bestPeriod] * samples[i + bestPeriod]
+        samples.withUnsafeBufferPointer { buf in
+            let base = buf.baseAddress!
+            let windowCount = vDSP_Length(samples.count - bestPeriod)
+            var energyA: Float = 0
+            var energyB: Float = 0
+            vDSP_svesq(base, 1, &energyA, windowCount)
+            vDSP_svesq(base + bestPeriod, 1, &energyB, windowCount)
+            energy = energyA + energyB
         }
         let normalizedCorr = energy > 0 ? (2 * maxCorr / energy) : 0
 
@@ -187,8 +205,8 @@ class PitchDetector: ObservableObject {
         return frequency
     }
 
-    /// Parabolic interpolation for sub-sample accuracy
-    private func refineWithParabolicInterpolation(
+    /// Parabolic interpolation for sub-sample accuracy. Also a pure function — see detectPitch(_:sampleRate:).
+    static func refineWithParabolicInterpolation(
         period: Int,
         samples: [Float],
         minPeriod: Int,
@@ -202,12 +220,13 @@ class PitchDetector: ObservableObject {
         let periods = [period - 1, period, period + 1]
         var correlations: [Float] = []
 
-        for p in periods {
-            var corr: Float = 0
-            for i in 0..<(samples.count - p) {
-                corr += samples[i] * samples[i + p]
+        samples.withUnsafeBufferPointer { buf in
+            let base = buf.baseAddress!
+            for p in periods {
+                var corr: Float = 0
+                vDSP_dotpr(base, 1, base + p, 1, &corr, vDSP_Length(samples.count - p))
+                correlations.append(corr)
             }
-            correlations.append(corr)
         }
 
         // Parabolic interpolation
