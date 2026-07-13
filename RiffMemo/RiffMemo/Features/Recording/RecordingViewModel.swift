@@ -34,7 +34,7 @@ class RecordingViewModel {
 
     // MARK: - Dependencies
 
-    private let audioRecorder: AudioRecordingManager
+    private let audioRecorder: any AudioRecorderProtocol
     private let repository: RecordingRepository
 
     // MARK: - Private Properties
@@ -57,7 +57,7 @@ class RecordingViewModel {
     // MARK: - Initialization
 
     init(
-        audioRecorder: AudioRecordingManager,
+        audioRecorder: any AudioRecorderProtocol,
         repository: RecordingRepository
     ) {
         self.audioRecorder = audioRecorder
