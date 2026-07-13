@@ -134,18 +134,22 @@ final class RiffMemoUITests: XCTestCase {
         let recordButton = app.buttons["recordButton"]
         XCTAssertTrue(recordButton.waitForExistence(timeout: 10))
         recordButton.tap()
-        XCTAssertTrue(app.staticTexts["Recording..."].waitForExistence(timeout: 10), "Recording should start")
+        // CI's simulator runs this record -> stop -> save -> UI-refresh sequence roughly 4x
+        // slower than a local machine (measured: ~20s locally vs. ~85s on a passing CI run) —
+        // the waits below need real margin for that, not a local-machine-tuned budget
+        // (see WAS-103).
+        XCTAssertTrue(app.staticTexts["Recording..."].waitForExistence(timeout: 30), "Recording should start")
 
         Thread.sleep(forTimeInterval: 5)
 
         recordButton.tap()
-        XCTAssertTrue(app.staticTexts["Tap to Record"].waitForExistence(timeout: 10), "Recording should stop")
+        XCTAssertTrue(app.staticTexts["Tap to Record"].waitForExistence(timeout: 30), "Recording should stop")
         screenshot("01-recording-saved")
 
         // 2. Open the recording we just made. Library sorts newest-first, so it's the first row.
         app.tabBars.buttons["Library"].tap()
         let recordingRow = app.descendants(matching: .any)["recordingRow"].firstMatch
-        XCTAssertTrue(recordingRow.waitForExistence(timeout: 10), "The recording we just made should appear in the Library")
+        XCTAssertTrue(recordingRow.waitForExistence(timeout: 30), "The recording we just made should appear in the Library")
         // The row's NavigationLink combines its title and edit pencil into one accessibility
         // element (the waveform thumbnail is excluded via .accessibilityHidden, see WAS-87), but
         // a plain .tap() still lands ambiguously because the thumbnail's gesture recognizers
@@ -223,18 +227,22 @@ final class RiffMemoUITests: XCTestCase {
         let recordButton = app.buttons["recordButton"]
         XCTAssertTrue(recordButton.waitForExistence(timeout: 10))
         recordButton.tap()
-        XCTAssertTrue(app.staticTexts["Recording..."].waitForExistence(timeout: 10), "Recording should start")
+        // CI's simulator runs this record -> stop -> save -> UI-refresh sequence roughly 4x
+        // slower than a local machine (measured: ~20s locally vs. ~85s on a passing CI run) —
+        // the waits below need real margin for that, not a local-machine-tuned budget
+        // (see WAS-103).
+        XCTAssertTrue(app.staticTexts["Recording..."].waitForExistence(timeout: 30), "Recording should start")
 
         Thread.sleep(forTimeInterval: 2)
 
         recordButton.tap()
-        XCTAssertTrue(app.staticTexts["Tap to Record"].waitForExistence(timeout: 10), "Recording should stop")
+        XCTAssertTrue(app.staticTexts["Tap to Record"].waitForExistence(timeout: 30), "Recording should stop")
         screenshot("01-recorded-clip")
 
         // 2. Go to Library and confirm the new recording landed there.
         app.tabBars.buttons["Library"].tap()
         let recordingRow = app.descendants(matching: .any)["recordingRow"].firstMatch
-        XCTAssertTrue(recordingRow.waitForExistence(timeout: 10), "The recording we just made should appear in the Library")
+        XCTAssertTrue(recordingRow.waitForExistence(timeout: 30), "The recording we just made should appear in the Library")
         let rowCountBeforeDelete = app.descendants(matching: .any).matching(identifier: "recordingRow").count
         screenshot("02-library-before-delete")
 
@@ -254,7 +262,7 @@ final class RiffMemoUITests: XCTestCase {
         // 4. Confirm it's gone: empty state if it was the only recording, otherwise one fewer row.
         if rowCountBeforeDelete == 1 {
             XCTAssertTrue(
-                app.staticTexts["No Recordings Yet"].waitForExistence(timeout: 10),
+                app.staticTexts["No Recordings Yet"].waitForExistence(timeout: 30),
                 "Deleting the only recording should show the empty state"
             )
         } else {
@@ -264,7 +272,7 @@ final class RiffMemoUITests: XCTestCase {
                 object: rowsAfterDelete
             )
             XCTAssertEqual(
-                XCTWaiter().wait(for: [expectation], timeout: 10),
+                XCTWaiter().wait(for: [expectation], timeout: 30),
                 .completed,
                 "Row count should decrease by one after delete"
             )
