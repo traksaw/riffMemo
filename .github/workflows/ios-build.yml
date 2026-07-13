@@ -43,6 +43,12 @@ jobs:
     - name: Select Xcode ${{ matrix.xcode }}
       run: sudo xcode-select -s /Applications/Xcode_${{ matrix.xcode }}.app
 
+    # Switching Xcode versions doesn't register that Xcode's bundled
+    # simulator runtimes with simctl by itself — without this, xcodebuild
+    # reports the runtime as "not installed" even though it ships on disk.
+    - name: Register Xcode ${{ matrix.xcode }}'s simulator runtimes
+      run: sudo xcodebuild -runFirstLaunch
+
     - name: Show Xcode version
       run: xcodebuild -version
 
