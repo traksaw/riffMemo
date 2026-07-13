@@ -21,7 +21,7 @@ actor AudioQualityAnalyzer {
         Logger.info("Analyzing audio quality from \(url.lastPathComponent)", category: Logger.audio)
 
         let loaded = try AudioSampleLoader.load(from: url)
-        let metrics = analyze(samples: loaded.samples)
+        let metrics = analyze(samples: loaded.samples, sampleRate: loaded.sampleRate)
 
         Logger.info("Quality analysis complete: \(metrics.quality)", category: Logger.audio)
 
@@ -29,12 +29,14 @@ actor AudioQualityAnalyzer {
     }
 
     /// Analyzes audio quality from pre-loaded samples, skipping the file decode step.
-    /// - Parameter samples: Raw, unnormalized first-channel samples.
+    /// - Parameters:
+    ///   - samples: Raw, unnormalized first-channel samples.
+    ///   - sampleRate: The recording's actual sample rate, used to window the dynamic-range calculation.
     /// - Returns: Audio quality metrics
-    func analyze(samples: [Float]) -> AudioQualityMetrics {
+    func analyze(samples: [Float], sampleRate: Double) -> AudioQualityMetrics {
         let peakLevel = calculatePeakLevel(samples: samples)
         let rmsLevel = calculateRMS(samples: samples)
-        let dynamicRange = calculateDynamicRange(samples: samples)
+        let dynamicRange = calculateDynamicRange(samples: samples, sampleRate: sampleRate)
         let crestFactor = calculateCrestFactor(peak: peakLevel, rms: rmsLevel)
         let silenceRatio = calculateSilenceRatio(samples: samples)
         let clippingDetected = detectClipping(samples: samples)
@@ -80,8 +82,8 @@ actor AudioQualityAnalyzer {
     }
 
     /// Calculates dynamic range (difference between loudest and quietest parts)
-    private func calculateDynamicRange(samples: [Float]) -> Double {
-        let windowSize = 44100 // 1 second at 44.1kHz
+    private func calculateDynamicRange(samples: [Float], sampleRate: Double) -> Double {
+        let windowSize = max(1, Int(sampleRate)) // 1 second at the recording's actual sample rate
         let numWindows = samples.count / windowSize
 
         guard numWindows > 0 else { return 0 }

@@ -32,6 +32,9 @@ class PitchDetector: ObservableObject {
     private var audioEngine: AVAudioEngine?
     private var inputNode: AVAudioInputNode?
 
+    // Reused across tap callbacks so the render thread doesn't allocate a new array every buffer.
+    private var sampleBuffer: [Float] = []
+
     // MARK: - Public Methods
 
     func startDetection() async throws {
@@ -93,10 +96,10 @@ class PitchDetector: ObservableObject {
         guard let channelData = buffer.floatChannelData else { return }
 
         let frameLength = Int(buffer.frameLength)
-        let samples = extractSamples(from: channelData[0], count: frameLength)
+        fillSampleBuffer(from: channelData[0], count: frameLength)
 
         // Detect pitch using autocorrelation
-        if let detectedFreq = detectPitch(samples: samples, sampleRate: sampleRate) {
+        if let detectedFreq = detectPitch(samples: sampleBuffer, sampleRate: sampleRate) {
             Task { @MainActor in
                 self.frequency = detectedFreq
                 self.updateNoteAndCents(from: detectedFreq)
@@ -104,12 +107,15 @@ class PitchDetector: ObservableObject {
         }
     }
 
-    private func extractSamples(from channelData: UnsafeMutablePointer<Float>, count: Int) -> [Float] {
-        var samples = [Float](repeating: 0, count: count)
-        for i in 0..<count {
-            samples[i] = channelData[i]
+    /// Copies `count` samples into the reusable `sampleBuffer`, resizing only when the
+    /// incoming frame count changes (normally constant across callbacks for a given tap).
+    private func fillSampleBuffer(from channelData: UnsafeMutablePointer<Float>, count: Int) {
+        if sampleBuffer.count != count {
+            sampleBuffer = [Float](repeating: 0, count: count)
         }
-        return samples
+        sampleBuffer.withUnsafeMutableBufferPointer { destination in
+            destination.baseAddress?.update(from: channelData, count: count)
+        }
     }
 
     /// Detects pitch using autocorrelation
@@ -138,8 +144,18 @@ class PitchDetector: ObservableObject {
             }
         }
 
+        // Normalize by the combined energy of the two windows being correlated at bestPeriod
+        // (NSDF-style: 2*corr / (energyA + energyB)), so the threshold is amplitude-independent
+        // — otherwise a fixed 0.1 cutoff on the raw correlation sum makes sensitivity swing
+        // with input loudness (quiet playing never crosses it, loud playing crosses it trivially).
+        var energy: Float = 0
+        for i in 0..<(samples.count - bestPeriod) {
+            energy += samples[i] * samples[i] + samples[i + bestPeriod] * samples[i + bestPeriod]
+        }
+        let normalizedCorr = energy > 0 ? (2 * maxCorr / energy) : 0
+
         // Check if correlation is strong enough
-        guard maxCorr > 0.1 else { return nil }
+        guard normalizedCorr > 0.1 else { return nil }
 
         // Refine using parabolic interpolation
         let refinedPeriod = refineWithParabolicInterpolation(

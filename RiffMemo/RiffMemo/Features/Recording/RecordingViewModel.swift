@@ -87,6 +87,14 @@ class RecordingViewModel {
                     }
                 }
 
+                // Set up recording-failure callback (e.g. disk full mid-recording) so the UI
+                // reacts immediately instead of waiting for an explicit stop
+                await audioRecorder.onRecordingFailed = { [weak self] error in
+                    Task { @MainActor [weak self] in
+                        self?.handleRecordingFailure(error)
+                    }
+                }
+
                 try await audioRecorder.startRecording()
                 isRecording = true
                 currentDuration = 0
@@ -105,6 +113,7 @@ class RecordingViewModel {
     }
 
     func stopRecording() {
+        guard isRecording else { return }
         stopDurationTimer()
         Task {
             do {
@@ -136,6 +145,21 @@ class RecordingViewModel {
                 Logger.error("Failed to stop recording: \(error)", category: Logger.audio)
             }
         }
+    }
+
+    /// Called when `AudioRecordingManager` tears down a recording mid-write (e.g. disk full).
+    /// Surfaces the error immediately rather than waiting for the user to tap stop, and never
+    /// calls `repository.save` — there's no usable Recording for a write that failed partway.
+    private func handleRecordingFailure(_ error: Error) {
+        guard isRecording else { return }
+
+        stopDurationTimer()
+        isRecording = false
+        audioLevel = 0
+        errorMessage = "Recording failed: \(error.localizedDescription)"
+        showError = true
+
+        Logger.error("Recording failed mid-write: \(error)", category: Logger.audio)
     }
 
     func toggleRecording() {
