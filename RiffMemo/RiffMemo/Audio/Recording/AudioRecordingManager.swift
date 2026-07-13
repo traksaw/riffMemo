@@ -30,12 +30,32 @@ actor AudioRecordingManager {
     // Frequency analyzer
     private var frequencyAnalyzer: FrequencyAnalyzer?
 
+    // Callback fired when the render-thread tap hits an unrecoverable error (e.g. disk full)
+    // and the recording is being torn down before the caller explicitly stopped it.
+    nonisolated(unsafe) var onRecordingFailed: (@Sendable (Error) -> Void)?
+
+    // Set by handleWriteFailure(_:) so stopRecording() can report the real cause instead of
+    // just "not recording" if the caller stops after a mid-recording failure already tore
+    // things down.
+    private var failureError: Error?
+
+    // Incremented on every startRecording(). Captured by the tap closure and passed back to
+    // handleWriteFailure(_:) so a write-failure Task that was scheduled for one recording but
+    // (due to actor scheduling delay) doesn't run until after that recording already ended and
+    // a new one started can recognize it's stale and no-op, instead of tearing down the new
+    // (unrelated, healthy) recording.
+    private var recordingSession = 0
+
     // MARK: - Public Methods
 
     func startRecording() async throws {
         guard !isRecording else {
             throw AudioError.alreadyRecording
         }
+
+        // Clear any failure state left over from a previous recording
+        failureError = nil
+        recordingSession += 1
 
         // Setup audio session
         try setupAudioSession()
@@ -44,7 +64,7 @@ actor AudioRecordingManager {
         self.frequencyAnalyzer = FrequencyAnalyzer(bandCount: 32)
 
         // Setup audio engine
-        try setupAudioEngine()
+        try setupAudioEngine(session: recordingSession)
 
         isRecording = true
         Logger.info("Audio recording started", category: Logger.audio)
@@ -52,21 +72,32 @@ actor AudioRecordingManager {
 
     func stopRecording(duration: TimeInterval, recordedWithBPM: Int? = nil, recordedWithTimeSignature: String? = nil) async throws -> Recording {
         guard isRecording else {
+            // If a write failure already tore the recording down, report the real cause
+            // instead of a bare "not recording" — and never fall through to build a
+            // Recording for what may be a truncated file.
+            if let failureError {
+                throw AudioError.writeFailed(underlying: failureError)
+            }
             throw AudioError.notRecording
         }
 
-        // Remove tap from input node BEFORE stopping engine
-        // This ensures audio data is properly flushed to file
-        if let inputNode = inputNode {
-            inputNode.removeTap(onBus: 0)
-        }
-
-        // Stop the engine
-        audioEngine?.stop()
+        stopEngineAndTap()
         isRecording = false
 
-        // Give the file system a moment to flush all buffers to disk
+        // Give the file system a moment to flush all buffers to disk. This is a suspension
+        // point, so a write failure on an in-flight buffer can still run handleWriteFailure(_:)
+        // and set `failureError` while we're asleep — re-check it below before trusting the
+        // file. (handleWriteFailure(_:) treats `failureError` — not `isRecording` — as its
+        // idempotency guard specifically so this race can't silently no-op.)
         try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+
+        if let failureError {
+            // Whichever path (this one or handleWriteFailure(_:)) detects the failure last is
+            // responsible for clearing engine state — idempotent, so safe even if the other
+            // path already did it.
+            clearEngineState()
+            throw AudioError.writeFailed(underlying: failureError)
+        }
 
         // Create recording object
         guard let audioFile = audioFile else {
@@ -93,11 +124,7 @@ actor AudioRecordingManager {
 
         Logger.info("Audio recording stopped - Duration: \(finalDuration)s, File size: \(fileSize) bytes", category: Logger.audio)
 
-        // Clean up references for next recording
-        self.audioEngine = nil
-        self.audioFile = nil
-        self.inputNode = nil
-        self.frequencyAnalyzer = nil
+        clearEngineState()
 
         return recording
     }
@@ -125,7 +152,7 @@ actor AudioRecordingManager {
         }
     }
 
-    private func setupAudioEngine() throws {
+    private func setupAudioEngine(session: Int) throws {
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
 
@@ -143,10 +170,32 @@ actor AudioRecordingManager {
         let file = try AVAudioFile(forWriting: audioFileURL, settings: format.settings)
         audioFile = file
 
+        // Captured as a local `let` — a plain class reference — rather than reading
+        // `self.frequencyAnalyzer` from inside the tap closure below. `frequencyAnalyzer` is
+        // an actor-isolated stored property; `startRecording()` sets it immediately before
+        // calling `setupAudioEngine()`, so snapshotting it here is safe, and it keeps the
+        // render-thread closure from touching actor-isolated state on every callback.
+        //
+        // IMPORTANT — ordering guarantee: this tap closure runs on Core Audio's real-time
+        // thread, entirely outside this actor's serial executor. It is only safe to use
+        // `analyzer` here because `stopRecording()` calls `inputNode.removeTap(onBus:)`
+        // BEFORE it nils out `frequencyAnalyzer` (and before the engine/file/inputNode are
+        // torn down). That ordering is what prevents this closure from running concurrently
+        // with actor-side cleanup — it is not enforced by the type system, so if
+        // `stopRecording()` is ever refactored, this ordering must be preserved.
+        let analyzer = self.frequencyAnalyzer
+
         // Install tap to write audio data AND calculate levels AND analyze frequencies
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in
-            // Write audio to file
-            try? file.write(from: buffer)
+            // Write audio to file. On failure, stop the recording rather than silently
+            // producing a truncated file — hand off to the actor since tearing down
+            // engine/tap/actor state must not happen directly from this render thread.
+            do {
+                try file.write(from: buffer)
+            } catch {
+                Task { await self?.handleWriteFailure(error, session: session) }
+                return
+            }
 
             // Calculate and send audio level
             if let level = self?.calculateLevel(from: buffer) {
@@ -158,7 +207,7 @@ actor AudioRecordingManager {
             }
 
             // Analyze and send frequency data
-            if let analyzer = self?.frequencyAnalyzer {
+            if let analyzer {
                 analyzer.analyze(buffer: buffer)
                 self?.onFrequencyData?(analyzer.frequencyMagnitudes)
             }
@@ -166,6 +215,63 @@ actor AudioRecordingManager {
 
         try engine.start()
         self.audioEngine = engine
+    }
+
+    /// Tears down an in-progress recording after an unrecoverable write failure, and notifies
+    /// the caller via `onRecordingFailed` so the UI can react immediately instead of waiting
+    /// for an explicit `stopRecording()` call.
+    ///
+    /// Actor-isolated, so this always runs serialized with `startRecording()`/`stopRecording()`.
+    /// Idempotency is guarded on `failureError` (not `isRecording`): `stopRecording()` sets
+    /// `isRecording = false` before its own flush `await`, and if this method used `isRecording`
+    /// as its guard, a write failure that lands during that suspension would see
+    /// `isRecording == false` and silently no-op — dropping `failureError` and letting
+    /// `stopRecording()` build a Recording from a truncated file. Guarding on `failureError`
+    /// instead means the failure is always recorded exactly once, regardless of which path
+    /// reaches the actor first.
+    ///
+    /// `session` guards against a Task scheduling delay: if this doesn't run until after its
+    /// recording already ended and a new one started (`recordingSession` incremented,
+    /// `failureError` reset), a stale failure must not tear down the new, unrelated recording.
+    ///
+    /// `onRecordingFailed` fires unconditionally (once `failureError` is set) rather than only
+    /// when this call is the one doing teardown — `stopRecording()` may have already claimed
+    /// the stop and will itself throw `AudioError.writeFailed` from `failureError`, but it
+    /// never re-invokes `onRecordingFailed` itself, so skipping the call here would drop the
+    /// notification entirely in that interleaving.
+    private func handleWriteFailure(_ error: Error, session: Int) {
+        guard session == recordingSession else { return }
+        guard failureError == nil else { return }
+        failureError = error
+
+        Logger.error("Audio write failed, stopping recording: \(error)", category: Logger.audio)
+
+        // If stopRecording() already claimed the stop (isRecording is already false), it will
+        // pick up `failureError` itself after its flush sleep and clear state there — don't
+        // redo the teardown.
+        if isRecording {
+            stopEngineAndTap()
+            isRecording = false
+            clearEngineState()
+        }
+
+        onRecordingFailed?(error)
+    }
+
+    /// Removes the tap and stops the engine. Safe to call regardless of whether either is active.
+    private func stopEngineAndTap() {
+        if let inputNode {
+            inputNode.removeTap(onBus: 0)
+        }
+        audioEngine?.stop()
+    }
+
+    /// Clears engine-related state so the next recording starts clean.
+    private func clearEngineState() {
+        audioEngine = nil
+        audioFile = nil
+        inputNode = nil
+        frequencyAnalyzer = nil
     }
 
     private nonisolated func calculateLevel(from buffer: AVAudioPCMBuffer) -> Float {
@@ -200,6 +306,7 @@ enum AudioError: LocalizedError {
     case notRecording
     case noAudioFile
     case setupFailed
+    case writeFailed(underlying: Error)
 
     var errorDescription: String? {
         switch self {
@@ -211,6 +318,8 @@ enum AudioError: LocalizedError {
             return "Audio file not found"
         case .setupFailed:
             return "Failed to setup audio engine"
+        case .writeFailed(let underlying):
+            return "Recording failed while writing audio data: \(underlying.localizedDescription)"
         }
     }
 }

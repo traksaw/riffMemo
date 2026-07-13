@@ -34,7 +34,7 @@ class RecordingViewModel {
 
     // MARK: - Dependencies
 
-    private let audioRecorder: AudioRecordingManager
+    private let audioRecorder: any AudioRecorderProtocol
     private let repository: RecordingRepository
 
     // MARK: - Private Properties
@@ -47,10 +47,17 @@ class RecordingViewModel {
     private var samplesSinceLastUpdate: Int = 0
     private let samplesPerUpdate: Int = 2  // Update display every 2 samples (Shape is very efficient)
 
+    // Set synchronously at the top of stopRecording(), before the async actor round-trip.
+    // `isRecording` itself isn't flipped to false until that round-trip completes, so guarding
+    // only on `isRecording` doesn't stop a rapid second tap from firing a concurrent stop that
+    // reaches the actor after the first has already finished — producing a spurious "No
+    // recording in progress" error even though the first tap's recording saved fine.
+    private var isStoppingRecording = false
+
     // MARK: - Initialization
 
     init(
-        audioRecorder: AudioRecordingManager,
+        audioRecorder: any AudioRecorderProtocol,
         repository: RecordingRepository
     ) {
         self.audioRecorder = audioRecorder
@@ -87,6 +94,14 @@ class RecordingViewModel {
                     }
                 }
 
+                // Set up recording-failure callback (e.g. disk full mid-recording) so the UI
+                // reacts immediately instead of waiting for an explicit stop
+                await audioRecorder.onRecordingFailed = { [weak self] error in
+                    Task { @MainActor [weak self] in
+                        self?.handleRecordingFailure(error)
+                    }
+                }
+
                 try await audioRecorder.startRecording()
                 isRecording = true
                 currentDuration = 0
@@ -105,8 +120,11 @@ class RecordingViewModel {
     }
 
     func stopRecording() {
+        guard isRecording, !isStoppingRecording else { return }
+        isStoppingRecording = true
         stopDurationTimer()
         Task {
+            defer { isStoppingRecording = false }
             do {
                 let duration = currentDuration
                 let recording = try await audioRecorder.stopRecording(
@@ -114,6 +132,14 @@ class RecordingViewModel {
                     recordedWithBPM: recordingBPM,
                     recordedWithTimeSignature: recordingTimeSignature
                 )
+
+                try await repository.save(recording)
+                Logger.info("Recording stopped and saved with duration: \(duration)s", category: Logger.audio)
+
+                // Only flip to "stopped" once the recording is durably persisted — a caller
+                // reacting to isRecording==false (e.g. immediately switching to the Library tab,
+                // which fetches its list once per visit with no live-refresh) must be able to
+                // rely on the recording already being queryable, not racing an in-flight save.
                 isRecording = false
                 currentDuration = 0
                 audioLevel = 0 // Reset audio level
@@ -122,13 +148,17 @@ class RecordingViewModel {
                 recordingBPM = nil
                 recordingTimeSignature = nil
 
-                try await repository.save(recording)
-                Logger.info("Recording stopped and saved with duration: \(duration)s", category: Logger.audio)
-
                 // Queue automatic analysis
                 AudioAnalysisManager.shared.queueAnalysis(recording)
                 Logger.info("Queued automatic analysis for: \(recording.title)", category: Logger.audio)
 
+            } catch AudioError.writeFailed {
+                // Already surfaced via the onRecordingFailed callback → handleRecordingFailure(_:),
+                // which fires unconditionally whenever AudioRecordingManager records a write
+                // failure. Don't clobber that more specific message with a generic one here —
+                // just make sure recording state is cleared.
+                isRecording = false
+                Logger.error("Stop reported a write failure already surfaced via onRecordingFailed", category: Logger.audio)
             } catch {
                 errorMessage = "Failed to save recording: \(error.localizedDescription)"
                 showError = true
@@ -136,6 +166,21 @@ class RecordingViewModel {
                 Logger.error("Failed to stop recording: \(error)", category: Logger.audio)
             }
         }
+    }
+
+    /// Called when `AudioRecordingManager` tears down a recording mid-write (e.g. disk full).
+    /// Surfaces the error immediately rather than waiting for the user to tap stop, and never
+    /// calls `repository.save` — there's no usable Recording for a write that failed partway.
+    private func handleRecordingFailure(_ error: Error) {
+        guard isRecording else { return }
+
+        stopDurationTimer()
+        isRecording = false
+        audioLevel = 0
+        errorMessage = "Recording failed: \(error.localizedDescription)"
+        showError = true
+
+        Logger.error("Recording failed mid-write: \(error)", category: Logger.audio)
     }
 
     func toggleRecording() {

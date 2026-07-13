@@ -81,7 +81,7 @@ class AudioAnalysisManager {
             // Quality Analysis
             if options.contains(.quality) {
                 analysisProgress = 0.7
-                results.quality = await qualityAnalyzer.analyze(samples: loaded.samples)
+                results.quality = await qualityAnalyzer.analyze(samples: loaded.samples, sampleRate: loaded.sampleRate)
                 Logger.info("Quality: \(results.quality?.quality.rawValue ?? "Unknown")", category: Logger.audio)
             }
         } catch {
