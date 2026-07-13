@@ -27,6 +27,10 @@ class PitchDetector: ObservableObject {
     private let a4Frequency: Double = 440.0
     private let noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
+    /// Minimum average per-sample energy (mean of squared samples, ~-60dBFS RMS) required
+    /// before attempting pitch detection at all — see the noise-floor comment in detectPitch(_:sampleRate:).
+    private static let minimumAverageEnergy: Float = 1e-6
+
     // MARK: - Audio Components
 
     private var audioEngine: AVAudioEngine?
@@ -127,6 +131,16 @@ class PitchDetector: ObservableObject {
         let maxPeriod = Int(sampleRate / minFreq)
 
         guard maxPeriod < samples.count else { return nil }
+
+        // Absolute noise floor. The correlation check below is normalized by the signal's own
+        // energy specifically so its sensitivity is amplitude-independent (WAS-55) — but that
+        // means it can no longer tell quiet real playing apart from silence/ambient mic noise
+        // on its own, since normalizing divides out the very amplitude information a raw
+        // threshold used to gate on. Require a minimum average per-sample energy first; digital
+        // silence is exactly 0 and typical mic self-/room-noise sits well below this, chosen
+        // conservatively so real playing (even quiet) still passes.
+        let averageEnergy = samples.reduce(Float(0)) { $0 + $1 * $1 } / Float(samples.count)
+        guard averageEnergy > PitchDetector.minimumAverageEnergy else { return nil }
 
         // Calculate autocorrelation
         var maxCorr: Float = 0

@@ -39,6 +39,13 @@ actor AudioRecordingManager {
     // things down.
     private var failureError: Error?
 
+    // Incremented on every startRecording(). Captured by the tap closure and passed back to
+    // handleWriteFailure(_:) so a write-failure Task that was scheduled for one recording but
+    // (due to actor scheduling delay) doesn't run until after that recording already ended and
+    // a new one started can recognize it's stale and no-op, instead of tearing down the new
+    // (unrelated, healthy) recording.
+    private var recordingSession = 0
+
     // MARK: - Public Methods
 
     func startRecording() async throws {
@@ -48,6 +55,7 @@ actor AudioRecordingManager {
 
         // Clear any failure state left over from a previous recording
         failureError = nil
+        recordingSession += 1
 
         // Setup audio session
         try setupAudioSession()
@@ -56,7 +64,7 @@ actor AudioRecordingManager {
         self.frequencyAnalyzer = FrequencyAnalyzer(bandCount: 32)
 
         // Setup audio engine
-        try setupAudioEngine()
+        try setupAudioEngine(session: recordingSession)
 
         isRecording = true
         Logger.info("Audio recording started", category: Logger.audio)
@@ -84,6 +92,10 @@ actor AudioRecordingManager {
         try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
 
         if let failureError {
+            // Whichever path (this one or handleWriteFailure(_:)) detects the failure last is
+            // responsible for clearing engine state — idempotent, so safe even if the other
+            // path already did it.
+            clearEngineState()
             throw AudioError.writeFailed(underlying: failureError)
         }
 
@@ -140,7 +152,7 @@ actor AudioRecordingManager {
         }
     }
 
-    private func setupAudioEngine() throws {
+    private func setupAudioEngine(session: Int) throws {
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
 
@@ -181,7 +193,7 @@ actor AudioRecordingManager {
             do {
                 try file.write(from: buffer)
             } catch {
-                Task { await self?.handleWriteFailure(error) }
+                Task { await self?.handleWriteFailure(error, session: session) }
                 return
             }
 
@@ -217,24 +229,33 @@ actor AudioRecordingManager {
     /// `stopRecording()` build a Recording from a truncated file. Guarding on `failureError`
     /// instead means the failure is always recorded exactly once, regardless of which path
     /// reaches the actor first.
-    private func handleWriteFailure(_ error: Error) {
+    ///
+    /// `session` guards against a Task scheduling delay: if this doesn't run until after its
+    /// recording already ended and a new one started (`recordingSession` incremented,
+    /// `failureError` reset), a stale failure must not tear down the new, unrelated recording.
+    ///
+    /// `onRecordingFailed` fires unconditionally (once `failureError` is set) rather than only
+    /// when this call is the one doing teardown — `stopRecording()` may have already claimed
+    /// the stop and will itself throw `AudioError.writeFailed` from `failureError`, but it
+    /// never re-invokes `onRecordingFailed` itself, so skipping the call here would drop the
+    /// notification entirely in that interleaving.
+    private func handleWriteFailure(_ error: Error, session: Int) {
+        guard session == recordingSession else { return }
         guard failureError == nil else { return }
         failureError = error
 
         Logger.error("Audio write failed, stopping recording: \(error)", category: Logger.audio)
 
         // If stopRecording() already claimed the stop (isRecording is already false), it will
-        // pick up `failureError` itself after its flush sleep — don't re-teardown or re-notify.
-        let wasRecording = isRecording
-        if wasRecording {
+        // pick up `failureError` itself after its flush sleep and clear state there — don't
+        // redo the teardown.
+        if isRecording {
             stopEngineAndTap()
             isRecording = false
             clearEngineState()
         }
 
-        if wasRecording {
-            onRecordingFailed?(error)
-        }
+        onRecordingFailed?(error)
     }
 
     /// Removes the tap and stops the engine. Safe to call regardless of whether either is active.

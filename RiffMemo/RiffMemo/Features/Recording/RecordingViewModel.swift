@@ -47,6 +47,13 @@ class RecordingViewModel {
     private var samplesSinceLastUpdate: Int = 0
     private let samplesPerUpdate: Int = 2  // Update display every 2 samples (Shape is very efficient)
 
+    // Set synchronously at the top of stopRecording(), before the async actor round-trip.
+    // `isRecording` itself isn't flipped to false until that round-trip completes, so guarding
+    // only on `isRecording` doesn't stop a rapid second tap from firing a concurrent stop that
+    // reaches the actor after the first has already finished — producing a spurious "No
+    // recording in progress" error even though the first tap's recording saved fine.
+    private var isStoppingRecording = false
+
     // MARK: - Initialization
 
     init(
@@ -113,9 +120,11 @@ class RecordingViewModel {
     }
 
     func stopRecording() {
-        guard isRecording else { return }
+        guard isRecording, !isStoppingRecording else { return }
+        isStoppingRecording = true
         stopDurationTimer()
         Task {
+            defer { isStoppingRecording = false }
             do {
                 let duration = currentDuration
                 let recording = try await audioRecorder.stopRecording(
@@ -138,6 +147,13 @@ class RecordingViewModel {
                 AudioAnalysisManager.shared.queueAnalysis(recording)
                 Logger.info("Queued automatic analysis for: \(recording.title)", category: Logger.audio)
 
+            } catch AudioError.writeFailed {
+                // Already surfaced via the onRecordingFailed callback → handleRecordingFailure(_:),
+                // which fires unconditionally whenever AudioRecordingManager records a write
+                // failure. Don't clobber that more specific message with a generic one here —
+                // just make sure recording state is cleared.
+                isRecording = false
+                Logger.error("Stop reported a write failure already surfaced via onRecordingFailed", category: Logger.audio)
             } catch {
                 errorMessage = "Failed to save recording: \(error.localizedDescription)"
                 showError = true
