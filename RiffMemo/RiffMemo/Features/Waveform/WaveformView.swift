@@ -137,8 +137,10 @@ struct WaveformView: View {
                     HapticManager.shared.impact(style: .light)
                 }
         )
+        // Shared by an interactive scrubber (RecordingDetailView) and a decorative
+        // thumbnail (WaveformThumbnail) — accessibility identifiers/labels belong at
+        // the call sites, not here, so decorative usages don't inherit "scrubber" semantics.
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Waveform scrubber")
     }
 }
 

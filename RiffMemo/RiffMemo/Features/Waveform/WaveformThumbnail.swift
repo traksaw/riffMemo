@@ -34,6 +34,7 @@ struct WaveformThumbnail: View {
                     configuration: .thumbnail
                 )
                 .frame(height: height)
+                .accessibilityHidden(true) // decorative — the row already announces title/duration/date
             } else {
                 // Placeholder
                 WaveformPlaceholder(compact: true)
