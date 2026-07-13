@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: Build and Test
+    name: Build and Test (iOS ${{ matrix.ios }})
     # Deliberately NOT macos-26: Xcode 26.x has a known, unresolved hang bug
     # on GitHub-hosted macOS runners (xcodebuild deadlocks after signing,
     # before tests run — see actions/runner-images#13264). macos-15 + Xcode
@@ -20,9 +20,28 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
 
+    strategy:
+      fail-fast: false
+      matrix:
+        # Spans the oldest, middle, and newest iOS runtime that ships with an
+        # Xcode 16.x on the macos-15 image — deliberately stays within Xcode
+        # 16.x for the same hang-bug reason as above, rather than reaching
+        # for Xcode 26.x's iOS 26 runtimes. Deployment target is iOS 18.0
+        # (project.pbxproj), so 18.0 is the floor, not an arbitrary choice.
+        include:
+          - xcode: '16.0'
+            ios: '18.0'
+          - xcode: '16.2'
+            ios: '18.2'
+          - xcode: '16.4'
+            ios: '18.5'
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+
+    - name: Select Xcode ${{ matrix.xcode }}
+      run: sudo xcode-select -s /Applications/Xcode_${{ matrix.xcode }}.app
 
     - name: Show Xcode version
       run: xcodebuild -version
@@ -54,6 +73,6 @@ jobs:
         xcodebuild test \
           -project RiffMemo.xcodeproj \
           -scheme RiffMemo \
-          -destination 'platform=iOS Simulator,name=iPhone 16' \
+          -destination 'platform=iOS Simulator,name=iPhone 16,OS=${{ matrix.ios }}' \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO
