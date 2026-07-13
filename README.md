@@ -91,6 +91,10 @@ xcodebuild test -project RiffMemo.xcodeproj -scheme RiffMemo \
 ```
 The same build-and-test job runs in CI on every push and pull request against `main`.
 
+### Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for branch/commit conventions, testing expectations, and how to propose or pick up work.
+
 ## Roadmap
 
 - [ ] Instrument detection
