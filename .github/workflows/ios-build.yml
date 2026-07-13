@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: Build and Test
+    name: Build and Test (${{ matrix.device }})
     # Deliberately NOT macos-26: Xcode 26.x has a known, unresolved hang bug
     # on GitHub-hosted macOS runners (xcodebuild deadlocks after signing,
     # before tests run — see actions/runner-images#13264). macos-15 + Xcode
@@ -19,6 +19,26 @@ jobs:
     # silently consuming the default 360-minute job timeout.
     runs-on: macos-15
     timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # Matrixes device model/size class rather than iOS runtime version:
+        # this runner image only ships one fully-installed simulator runtime
+        # (paired with the default Xcode, 16.4 -> iOS 18.5). The older
+        # side-by-side Xcode installs (16.0, 16.2, ...) exist for build-time
+        # SDK compatibility only — their bundled simulator runtimes aren't
+        # actually on disk, and `xcodebuild -runFirstLaunch` doesn't install
+        # them (confirmed by a failed CI run, not assumed). Getting real
+        # multi-iOS-version coverage would need either lowering the iOS 18.0
+        # deployment target or an on-demand runtime download in CI, which
+        # trades reliability for coverage this project doesn't need yet.
+        # Device/size-class spread still catches real layout regressions
+        # (compact vs. regular width, smallest vs. largest screen).
+        device:
+          - 'iPhone SE (3rd generation)'
+          - 'iPhone 16'
+          - 'iPhone 16 Pro Max'
 
     steps:
     - name: Checkout code
