@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: Build and Test (iOS ${{ matrix.ios }})
+    name: Build and Test (${{ matrix.device }})
     # Deliberately NOT macos-26: Xcode 26.x has a known, unresolved hang bug
     # on GitHub-hosted macOS runners (xcodebuild deadlocks after signing,
     # before tests run — see actions/runner-images#13264). macos-15 + Xcode
@@ -23,31 +23,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Spans the oldest, middle, and newest iOS runtime that ships with an
-        # Xcode 16.x on the macos-15 image — deliberately stays within Xcode
-        # 16.x for the same hang-bug reason as above, rather than reaching
-        # for Xcode 26.x's iOS 26 runtimes. Deployment target is iOS 18.0
-        # (project.pbxproj), so 18.0 is the floor, not an arbitrary choice.
-        include:
-          - xcode: '16.0'
-            ios: '18.0'
-          - xcode: '16.2'
-            ios: '18.2'
-          - xcode: '16.4'
-            ios: '18.5'
+        # Matrixes device model/size class rather than iOS runtime version:
+        # this runner image only ships one fully-installed simulator runtime
+        # (paired with the default Xcode, 16.4 -> iOS 18.5). The older
+        # side-by-side Xcode installs (16.0, 16.2, ...) exist for build-time
+        # SDK compatibility only — their bundled simulator runtimes aren't
+        # actually on disk, and `xcodebuild -runFirstLaunch` doesn't install
+        # them (confirmed by a failed CI run, not assumed). Getting real
+        # multi-iOS-version coverage would need either lowering the iOS 18.0
+        # deployment target or an on-demand runtime download in CI, which
+        # trades reliability for coverage this project doesn't need yet.
+        # Device/size-class spread still catches real layout regressions
+        # (compact vs. regular width, smallest vs. largest screen).
+        device:
+          - 'iPhone SE (3rd generation)'
+          - 'iPhone 16'
+          - 'iPhone 16 Pro Max'
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
-    - name: Select Xcode ${{ matrix.xcode }}
-      run: sudo xcode-select -s /Applications/Xcode_${{ matrix.xcode }}.app
-
-    # Switching Xcode versions doesn't register that Xcode's bundled
-    # simulator runtimes with simctl by itself — without this, xcodebuild
-    # reports the runtime as "not installed" even though it ships on disk.
-    - name: Register Xcode ${{ matrix.xcode }}'s simulator runtimes
-      run: sudo xcodebuild -runFirstLaunch
 
     - name: Show Xcode version
       run: xcodebuild -version
@@ -79,6 +74,6 @@ jobs:
         xcodebuild test \
           -project RiffMemo.xcodeproj \
           -scheme RiffMemo \
-          -destination 'platform=iOS Simulator,name=iPhone 16,OS=${{ matrix.ios }}' \
+          -destination 'platform=iOS Simulator,name=${{ matrix.device }}' \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO
