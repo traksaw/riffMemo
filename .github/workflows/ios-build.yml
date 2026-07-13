@@ -92,3 +92,23 @@ jobs:
           -skip-testing:RiffMemoUITests/RiffMemoUITests/testLaunchPerformance \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO
+
+  # Branch protection requires a status check by name, but the matrix job's
+  # name embeds the device (`Build and Test (iPhone 16)`, etc.), so adding or
+  # renaming a matrix entry silently orphans the old required-check name or
+  # leaves a new leg unrequired (see WAS-105). This job is a single stable
+  # name — "Build and Test" — that branch protection can require permanently;
+  # it just relays the matrix's actual result and never needs updating when
+  # the device list changes.
+  build-summary:
+    name: Build and Test
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check matrix result
+        run: |
+          if [ "${{ needs.build.result }}" != "success" ]; then
+            echo "Matrix job result: ${{ needs.build.result }}"
+            exit 1
+          fi
