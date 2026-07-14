@@ -1,0 +1,41 @@
+excluded:
+  - RiffMemo.xcodeproj
+  - RiffMemoTests
+  - RiffMemoUITests
+
+opt_in_rules:
+  - empty_count
+  - force_unwrapping
+  - redundant_type_annotation
+
+disabled_rules:
+  - todo
+
+# force_try defaults to `error` severity; downgraded to `warning` so this first-pass
+# config surfaces pre-existing violations (3 in the codebase today) without immediately
+# failing a `--strict` run. Ratchet back to error once those are cleaned up.
+force_try: warning
+
+line_length:
+  warning: 150
+  error: 300
+
+function_body_length:
+  warning: 80
+  error: 150
+
+type_body_length:
+  warning: 400
+  error: 600
+
+file_length:
+  warning: 500
+  error: 1000
+
+identifier_name:
+  min_length:
+    warning: 2
+  excluded:
+    - id
+    - x
+    - y
