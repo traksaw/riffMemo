@@ -4,7 +4,7 @@ This is a solo/portfolio project, not a project with a formal contribution proce
 
 ## Building and testing
 
-Follow the [Getting Started](README.md#getting-started) section in the README for prerequisites and setup ([SETUP_GUIDE.md](SETUP_GUIDE.md) / [XCODE_FIX_GUIDE.md](XCODE_FIX_GUIDE.md) cover the Xcode-project side of things).
+Follow the [Getting Started](README.md#getting-started) section in the README for prerequisites and setup.
 
 To run the same build-and-test steps CI runs:
 

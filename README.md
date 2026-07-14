@@ -81,7 +81,7 @@ git clone https://github.com/traksaw/riffMemo.git
 cd riffMemo/RiffMemo
 open RiffMemo.xcodeproj
 ```
-Select your development team under signing settings, then build and run. See [SETUP_GUIDE.md](SETUP_GUIDE.md) for a walkthrough and [XCODE_FIX_GUIDE.md](XCODE_FIX_GUIDE.md) for common project-setup issues.
+Select your development team under signing settings, then build and run.
 
 ### Running tests
 ```bash

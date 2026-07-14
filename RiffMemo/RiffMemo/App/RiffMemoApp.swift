@@ -21,7 +21,11 @@ struct RiffMemoApp: App {
             // entitlement is present and no configuration says otherwise, so
             // this stays local-only until sync is deliberately turned on.
             let configuration = ModelConfiguration(cloudKitDatabase: .none)
-            modelContainer = try ModelContainer(for: Recording.self, configurations: configuration)
+            modelContainer = try ModelContainer(
+                for: Schema(versionedSchema: RiffMemoSchemaV1.self),
+                migrationPlan: RiffMemoMigrationPlan.self,
+                configurations: configuration
+            )
         } catch {
             fatalError("Failed to initialize ModelContainer: \(error)")
         }
