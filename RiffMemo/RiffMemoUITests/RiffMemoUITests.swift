@@ -281,4 +281,69 @@ final class RiffMemoUITests: XCTestCase {
 
         XCTAssertEqual(app.state, .runningForeground, "App must not crash on delete (WAS-50)")
     }
+
+    // MARK: - WAS-98 accessibility audit verification
+
+    /// Confirms the WAS-87 fix holds in the live accessibility tree — the same tree VoiceOver
+    /// reads from — not just in source. Records a real clip so both call sites of
+    /// `WaveformView` are exercised: the decorative Library thumbnail must not surface a
+    /// "waveformView" element or "Waveform scrubber" label at all (fully hidden), while the
+    /// interactive detail-view waveform must expose both plus adjustable/slider semantics.
+    @MainActor
+    func testWaveformAccessibilityScopedPerCallSite() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        func screenshot(_ name: String) {
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+
+        // 1. Record a short clip so Library has a waveform thumbnail to inspect.
+        app.tabBars.buttons["Record"].tap()
+        let recordButton = app.buttons["recordButton"]
+        XCTAssertTrue(recordButton.waitForExistence(timeout: 10))
+        recordButton.tap()
+        XCTAssertTrue(app.staticTexts["Recording..."].waitForExistence(timeout: 30), "Recording should start")
+
+        Thread.sleep(forTimeInterval: 2)
+
+        recordButton.tap()
+        XCTAssertTrue(app.staticTexts["Tap to Record"].waitForExistence(timeout: 30), "Recording should stop")
+
+        // 2. Library row (decorative usage): nothing on this screen should expose the
+        // "waveformView" identifier or a "Waveform scrubber" label — accessibilityHidden
+        // removes the whole thumbnail subtree from the accessibility tree, so a VoiceOver
+        // user swiping through this row should never land on it.
+        app.tabBars.buttons["Library"].tap()
+        let recordingRow = app.descendants(matching: .any)["recordingRow"].firstMatch
+        XCTAssertTrue(recordingRow.waitForExistence(timeout: 30), "The recording we just made should appear in the Library")
+        screenshot("01-library-row")
+
+        XCTAssertFalse(
+            app.descendants(matching: .any)["waveformView"].exists,
+            "Library screen must not expose a 'waveformView' accessibility element (WAS-87 regression)"
+        )
+        let scrubberLabelOnLibrary = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", "Waveform scrubber"))
+            .firstMatch
+        XCTAssertFalse(
+            scrubberLabelOnLibrary.exists,
+            "Decorative Library thumbnail must not announce as a scrubber (WAS-87 regression)"
+        )
+
+        // 3. Open the recording (interactive usage): this is the call site WAS-52/WAS-87
+        // intentionally moved the identifier/label pair to — it must expose both, and expose
+        // adjustable/slider semantics so VoiceOver users know it's draggable.
+        recordingRow.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.12)).tap()
+
+        let waveform = app.descendants(matching: .any)["waveformView"].firstMatch
+        XCTAssertTrue(waveform.waitForExistence(timeout: 15), "Waveform should finish loading")
+        screenshot("02-detail-waveform")
+
+        XCTAssertEqual(waveform.label, "Waveform scrubber", "Interactive detail-view waveform must announce as a scrubber")
+        XCTAssertTrue(app.sliders.firstMatch.exists, "Interactive waveform should expose adjustable/slider semantics to VoiceOver")
+    }
 }
