@@ -107,6 +107,7 @@ iOSInjectionProject/
 *.swp
 *.swo
 *~.nib
+*.backup
 
 # IDE
 .vscode/
