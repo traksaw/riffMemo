@@ -18,11 +18,11 @@ class ExportViewModel {
 
     // MARK: - Dependencies
 
-    private let shareManager: ShareManager
+    private let shareManager: any ShareManagerProtocol
 
     // MARK: - Initialization
 
-    init(shareManager: ShareManager = .shared) {
+    init(shareManager: any ShareManagerProtocol = ShareManager.shared) {
         self.shareManager = shareManager
     }
 
@@ -42,7 +42,8 @@ class ExportViewModel {
             includeMetadata: includeMetadata,
             metadata: includeMetadata ? ExportMetadata.from(recording) : nil
         )
-        await shareManager.shareRecording(recording, settings: settings)
+        // `from` has no default in the protocol; the concrete manager's `nil` default is now explicit.
+        await shareManager.shareRecording(recording, settings: settings, from: nil)
 
         isExporting = false
     }
@@ -62,7 +63,7 @@ class ExportViewModel {
             includeMetadata: includeMetadata,
             metadata: nil
         )
-        await shareManager.shareMultipleRecordings(recordings, settings: settings)
+        await shareManager.shareMultipleRecordings(recordings, settings: settings, from: nil)
 
         isExporting = false
     }

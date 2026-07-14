@@ -17,11 +17,11 @@ class AnalysisViewModel {
 
     // MARK: - Dependencies
 
-    private let analysisManager: AudioAnalysisManager
+    private let analysisManager: any AnalysisManagerProtocol
 
     // MARK: - Initialization
 
-    init(analysisManager: AudioAnalysisManager = .shared) {
+    init(analysisManager: any AnalysisManagerProtocol = AudioAnalysisManager.shared) {
         self.analysisManager = analysisManager
     }
 
@@ -29,7 +29,10 @@ class AnalysisViewModel {
 
     func analyze(_ recording: Recording) async {
         isAnalyzing = true
-        _ = await analysisManager.analyzeRecording(recording)
+        // `options` has no default in the protocol (protocol requirements can't carry default
+        // parameter values), so the `.all` default the concrete manager used to supply here is
+        // now explicit.
+        _ = await analysisManager.analyzeRecording(recording, options: .all)
         isAnalyzing = false
     }
 }

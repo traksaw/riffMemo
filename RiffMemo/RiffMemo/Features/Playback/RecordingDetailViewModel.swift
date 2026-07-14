@@ -28,13 +28,13 @@ class RecordingDetailViewModel {
     // MARK: - Dependencies
 
     private let recording: Recording
-    private let audioPlayer: AudioPlaybackManager
+    private let audioPlayer: any AudioPlayerProtocol
     private var playbackTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
 
     // MARK: - Initialization
 
-    init(recording: Recording, audioPlayer: AudioPlaybackManager) {
+    init(recording: Recording, audioPlayer: any AudioPlayerProtocol) {
         self.recording = recording
         self.audioPlayer = audioPlayer
         self.duration = recording.duration

@@ -21,7 +21,7 @@ class WaveformViewModel {
 
     // MARK: - Dependencies
 
-    private let waveformGenerator: WaveformGenerator
+    private let waveformGenerator: any WaveformGeneratorProtocol
     private let recording: Recording
 
     // MARK: - Configuration
@@ -32,7 +32,7 @@ class WaveformViewModel {
 
     init(
         recording: Recording,
-        waveformGenerator: WaveformGenerator = WaveformGenerator(),
+        waveformGenerator: any WaveformGeneratorProtocol = WaveformGenerator(),
         targetSamples: Int = 300
     ) {
         self.recording = recording
