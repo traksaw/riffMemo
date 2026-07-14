@@ -45,7 +45,7 @@ This repo's convention (see `git log` for examples):
 
 ## Tests
 
-New code should ship with unit tests where the code is actually testable. `RecordingViewModel` and `LibraryViewModel` are the reference pattern: dependencies are injected as protocols (`AudioRecorderProtocol`, `RecordingRepository`) so tests can substitute mocks instead of touching AVFoundation or SwiftData directly — see `RiffMemoTests/RecordingViewModelRaceTests.swift` for the shape. Not every ViewModel follows this pattern yet (tracked as WAS-100); a PR isn't expected to close that gap, just not add to it.
+New code should ship with unit tests where the code is actually testable. Every feature ViewModel follows the same pattern: dependencies are injected as protocols (e.g. `AudioRecorderProtocol`, `RecordingRepository`, `AudioPlayerProtocol`) so tests can substitute mocks instead of touching AVFoundation, UIKit, or SwiftData directly — see `RiffMemoTests/RecordingViewModelRaceTests.swift` for the shape, and `RiffMemoTests/Mocks/` for the available test doubles. If a new ViewModel takes a concrete dependency that would need real I/O in tests, introduce a protocol for it following that same pattern before merging.
 
 ## Opening a PR
 

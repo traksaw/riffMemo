@@ -23,7 +23,7 @@ A native iOS app for musicians to capture, analyze, and organize musical ideas �
 ## Engineering Highlights
 
 - **Custom on-device DSP** — BPM, key, and pitch detection are implemented from scratch (`Audio/Analysis/`) rather than pulled from a third-party library, running entirely on-device with no network round-trip.
-- **Testable core flows** — `RecordingViewModel` and `LibraryViewModel` depend on protocol-mocked audio/data interfaces (`AudioRecorderProtocol`, `RecordingRepository`), so their state-machine and race-condition logic is unit-tested with `XCTest` without touching AVFoundation or a simulator's microphone; the remaining view models don't yet have dedicated test coverage.
+- **Testable core flows** — every feature ViewModel depends on protocol-mocked audio/data interfaces (`AudioRecorderProtocol`, `RecordingRepository`, `AudioPlayerProtocol`, `WaveformGeneratorProtocol`, `AnalysisManagerProtocol`, `ShareManagerProtocol`), so state-machine and error-path logic is unit-tested with `XCTest` without touching AVFoundation, UIKit, or a simulator's microphone.
 - **Clear separation of concerns** — MVVM throughout: views own presentation, `@Observable` view models own state. No feature reaches into another feature's internals.
 - **CI on every change** — GitHub Actions builds and runs the test suite on every push and pull request against `main`, catching regressions before merge.
 
@@ -65,7 +65,7 @@ RiffMemo/
 └── Resources/                 # Assets, localization
 ```
 
-Each feature follows the same shape: a SwiftUI `View` and an `@Observable` `ViewModel` for state and business logic; navigation is handled directly with SwiftUI's `TabView`/`NavigationStack`/sheets rather than a dedicated Coordinator layer. The audio engine and data layers are isolated behind repositories/managers so the UI never talks to AVFoundation or SwiftData directly — `RecordingViewModel` and `LibraryViewModel` in particular are unit-tested against protocol mocks rather than the real engine.
+Each feature follows the same shape: a SwiftUI `View` and an `@Observable` `ViewModel` for state and business logic; navigation is handled directly with SwiftUI's `TabView`/`NavigationStack`/sheets rather than a dedicated Coordinator layer. The audio engine and data layers are isolated behind repositories/managers so the UI never talks to AVFoundation or SwiftData directly — every feature ViewModel is unit-tested against protocol mocks rather than the real engine.
 
 ## Getting Started
 
