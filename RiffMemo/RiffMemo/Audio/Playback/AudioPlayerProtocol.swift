@@ -12,9 +12,7 @@ protocol AudioPlayerProtocol: AnyObject {
     func pause() async
     func resume() async
     func stop() async
-    func isPlaying() async -> Bool
     func currentTime() async -> TimeInterval
-    func duration() async -> TimeInterval
     func seek(to time: TimeInterval) async
 }
 

@@ -16,7 +16,7 @@ final class WaveformViewModelTests: XCTestCase {
     // deinits synchronously inside a non-`async` test method in this test target. Leaking
     // the instances here sidesteps the deinit rather than working around app code.
     // See memory: swiftdata-repo-deinit-crash.
-    private static var leaked: [Any] = []
+    private static var leakedToAvoidToolchainDeinitCrash: [Any] = []
 
     private func makeRecording(waveformData: Data? = nil) -> Recording {
         Recording(
@@ -98,9 +98,9 @@ final class WaveformViewModelTests: XCTestCase {
 
         // Avoid the toolchain deinit crash described above (only reproduces on this
         // synchronous test method, not the `async` ones elsewhere in this file).
-        Self.leaked.append(viewModel)
-        Self.leaked.append(recording)
-        Self.leaked.append(generator)
+        Self.leakedToAvoidToolchainDeinitCrash.append(viewModel)
+        Self.leakedToAvoidToolchainDeinitCrash.append(recording)
+        Self.leakedToAvoidToolchainDeinitCrash.append(generator)
     }
 
     func testRegenerateDiscardsMemoryCacheAndFetchesFreshSamples() async {

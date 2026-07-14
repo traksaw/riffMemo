@@ -20,9 +20,7 @@ final class MockAudioPlayer: AudioPlayerProtocol, @unchecked Sendable {
 
     /// If set, play(recording:) throws this instead of succeeding.
     var playError: Error?
-    var isPlayingReturnValue = false
     var currentTimeReturnValue: TimeInterval = 0
-    var durationReturnValue: TimeInterval = 0
 
     func play(recording: Recording) async throws {
         playCallCount += 1
@@ -30,34 +28,22 @@ final class MockAudioPlayer: AudioPlayerProtocol, @unchecked Sendable {
         if let playError {
             throw playError
         }
-        isPlayingReturnValue = true
     }
 
     func pause() async {
         pauseCallCount += 1
-        isPlayingReturnValue = false
     }
 
     func resume() async {
         resumeCallCount += 1
-        isPlayingReturnValue = true
     }
 
     func stop() async {
         stopCallCount += 1
-        isPlayingReturnValue = false
-    }
-
-    func isPlaying() async -> Bool {
-        isPlayingReturnValue
     }
 
     func currentTime() async -> TimeInterval {
         currentTimeReturnValue
-    }
-
-    func duration() async -> TimeInterval {
-        durationReturnValue
     }
 
     func seek(to time: TimeInterval) async {
