@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	WAS-112: App Store Connect rejects uploads (ITMS-91053) when an app uses a
+	"required reason" API without declaring it here. This file lives inside the
+	RiffMemo synchronized folder so Xcode copies it into the app bundle automatically.
+
+	RiffMemoTests/PrivacyManifestTests.swift verifies that this file ships in the
+	built app, that every entry uses an accepted category/reason code, and that the
+	declared categories match what the app source actually uses. If you add a new
+	required-reason API (e.g. @AppStorage, stat(), systemUptime, volume capacity,
+	activeInputModes) that test will fail and tell you which category to add.
+	-->
+
+	<!-- RiffMemo does not track users and has no tracking domains. -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+
+	<!--
+	No data is collected. Recordings and metadata stay on device (and, once sync is
+	live, in the user's private CloudKit database, which the developer cannot read).
+	Sharing goes through the system share sheet at the user's request.
+	-->
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<!--
+		UserDefaults: metronome settings (SharedMetronomeService) and the Settings
+		screen's @AppStorage preferences. CA92.1 = app-only access to its own defaults.
+		-->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+		<!--
+		File timestamps: AudioRecordingManager reads a finished recording's file
+		attributes inside the app container. C617.1 = timestamps of files in the
+		app's own container, shown to the user or used for app functionality.
+		-->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
