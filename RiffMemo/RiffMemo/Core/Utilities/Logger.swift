@@ -10,7 +10,7 @@ import OSLog
 
 /// Centralized logging utility
 enum Logger {
-    private static let subsystem = Bundle.main.bundleIdentifier ?? "com.traksaw.RiffMemo"
+    private static let subsystem = Bundle.main.bundleIdentifier ?? "com.traksaw.riffmemo"
 
     static let app = OSLog(subsystem: subsystem, category: "App")
     static let audio = OSLog(subsystem: subsystem, category: "Audio")
