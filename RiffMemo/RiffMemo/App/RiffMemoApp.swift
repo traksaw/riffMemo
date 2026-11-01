@@ -10,31 +10,32 @@ import SwiftData
 
 @main
 struct RiffMemoApp: App {
-    // SwiftData container
-    let modelContainer: ModelContainer
-
-    init() {
-        do {
-            // WAS-51 added the iCloud/CloudKit entitlement so Recording's schema
-            // could be verified as CloudKit-compatible, but sync itself isn't
-            // live yet. SwiftData auto-enables CloudKit sync whenever the
-            // entitlement is present and no configuration says otherwise, so
-            // this stays local-only until sync is deliberately turned on.
-            let configuration = ModelConfiguration(cloudKitDatabase: .none)
-            modelContainer = try ModelContainer(
-                for: Schema(versionedSchema: RiffMemoSchemaV1.self),
-                migrationPlan: RiffMemoMigrationPlan.self,
-                configurations: configuration
-            )
-        } catch {
-            fatalError("Failed to initialize ModelContainer: \(error)")
-        }
-    }
+    // Opening the SwiftData store can fail (corruption, failed migration, full
+    // disk). WAS-121: show a recovery screen instead of crashing every launch.
+    @State private var libraryStore = LibraryStore()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
-            MainTabView(modelContainer: modelContainer)
+            switch libraryStore.state {
+            case .loaded(let modelContainer):
+                MainTabView(modelContainer: modelContainer)
+                    .modelContainer(modelContainer)
+            case .failed(let error):
+                LibraryRecoveryView(
+                    error: error,
+                    failedRetryCount: libraryStore.failedRetryCount,
+                    onRetry: libraryStore.retry
+                )
+            }
         }
-        .modelContainer(modelContainer)
+        .onChange(of: scenePhase) { _, newPhase in
+            // Transient causes (a prewarmed launch before first unlock, a full disk)
+            // may have cleared by the time the app is actually in front of the user,
+            // so retry silently on every activation, including the first one.
+            if newPhase == .active {
+                libraryStore.retryAutomatically()
+            }
+        }
     }
 }
