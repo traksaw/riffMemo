@@ -15,7 +15,8 @@ struct LibraryRecoveryView: View {
     let failedRetryCount: Int
     let onRetry: () -> Void
 
-    @State private var filesToExport: [URL] = []
+    @State private var stagedExport: AudioRecovery.StagedExport?
+    @State private var isPreparingExport = false
     @State private var isExporting = false
     @State private var exportMessage: String?
 
@@ -48,12 +49,18 @@ struct LibraryRecoveryView: View {
                 .accessibilityIdentifier("libraryRecovery.retry")
 
                 Button {
-                    prepareExport()
+                    Task { await prepareExport() }
                 } label: {
-                    Label("Export my audio", systemImage: "square.and.arrow.up")
-                        .frame(maxWidth: .infinity)
+                    HStack {
+                        if isPreparingExport {
+                            ProgressView()
+                        }
+                        Label("Export my audio", systemImage: "square.and.arrow.up")
+                    }
+                    .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
+                .disabled(isPreparingExport || isExporting)
                 .accessibilityIdentifier("libraryRecovery.export")
             }
             .controlSize(.large)
@@ -71,6 +78,7 @@ struct LibraryRecoveryView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                    .accessibilityIdentifier("libraryRecovery.exportMessage")
             }
 
             Spacer()
@@ -82,29 +90,67 @@ struct LibraryRecoveryView: View {
                 .textSelection(.enabled)
         }
         .padding(24)
-        .sheet(isPresented: $isExporting) {
-            AudioExportPicker(urls: filesToExport) { exportedCount in
-                isExporting = false
-                if let exportedCount {
-                    exportMessage = String(localized: "Exported \(exportedCount) of \(filesToExport.count) audio files.")
+        .sheet(isPresented: $isExporting, onDismiss: finishExport) {
+            AudioExportPicker(urls: stagedExport?.files ?? []) { didExport in
+                if didExport, let stagedExport {
+                    exportMessage = Self.exportSummary(for: stagedExport)
                 }
+                isExporting = false
             }
             .ignoresSafeArea()
         }
     }
 
-    private func prepareExport() {
-        do {
-            let files = try AudioRecovery.audioFiles()
-            guard !files.isEmpty else {
-                exportMessage = String(localized: "No audio files were found on this device.")
-                return
+    private func prepareExport() async {
+        isPreparingExport = true
+        exportMessage = nil
+        defer { isPreparingExport = false }
+
+        let storeURL = LibraryStore.defaultStoreURL
+        // Off the main thread: the copy fallback can take a while on a big library.
+        let result = await Task.detached(priority: .userInitiated) {
+            Result {
+                try AudioRecovery.stageForExport(
+                    audioFiles: AudioRecovery.audioFiles(),
+                    libraryFiles: AudioRecovery.libraryStoreFiles(storeURL: storeURL)
+                )
             }
-            filesToExport = try AudioRecovery.stageForExport(files)
+        }.value
+
+        if case .success(let staged) = result, !staged.skippedFiles.isEmpty {
+            Logger.error("Recovery export skipped unreadable files: \(staged.skippedFiles)", category: Logger.data)
+        }
+
+        switch result {
+        case .success(let staged) where staged.audioCount == 0 && staged.skippedFiles.isEmpty:
+            exportMessage = String(localized: "No audio files were found on this device.")
+            AudioRecovery.clearStaging()
+        case .success(let staged) where staged.files.isEmpty:
+            exportMessage = Self.exportSummary(for: staged)
+            AudioRecovery.clearStaging()
+        case .success(let staged):
+            stagedExport = staged
             isExporting = true
-        } catch {
+        case .failure(let error):
             exportMessage = String(localized: "Couldn't prepare your audio for export: \(error.localizedDescription)")
         }
+    }
+
+    /// Runs however the picker goes away (export, cancel, or swipe-down).
+    private func finishExport() {
+        stagedExport = nil
+        AudioRecovery.clearStaging()
+    }
+
+    static func exportSummary(for staged: AudioRecovery.StagedExport) -> String {
+        var lines = [String(localized: "Exported \(staged.audioCount) audio takes, named by recording date.")]
+        if staged.includesLibraryBackup {
+            lines.append(String(localized: "Also saved \"\(AudioRecovery.libraryBackupBaseName)\" files, which hold your titles and notes. Keep them together."))
+        }
+        if !staged.skippedFiles.isEmpty {
+            lines.append(String(localized: "\(staged.skippedFiles.count) files couldn't be read: \(staged.skippedFiles.joined(separator: ", "))"))
+        }
+        return lines.joined(separator: "\n")
     }
 }
 
@@ -112,8 +158,8 @@ struct LibraryRecoveryView: View {
 /// the originals stay in place; the export never moves or removes anything.
 private struct AudioExportPicker: UIViewControllerRepresentable {
     let urls: [URL]
-    /// Called with the number of files exported, or `nil` if the user cancelled.
-    let onFinish: (Int?) -> Void
+    /// Called with `true` once the files are exported, `false` if the user cancelled.
+    let onFinish: (Bool) -> Void
 
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
         let picker = UIDocumentPickerViewController(forExporting: urls, asCopy: true)
@@ -128,18 +174,18 @@ private struct AudioExportPicker: UIViewControllerRepresentable {
     }
 
     final class Coordinator: NSObject, UIDocumentPickerDelegate {
-        let onFinish: (Int?) -> Void
+        let onFinish: (Bool) -> Void
 
-        init(onFinish: @escaping (Int?) -> Void) {
+        init(onFinish: @escaping (Bool) -> Void) {
             self.onFinish = onFinish
         }
 
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-            onFinish(urls.count)
+            onFinish(true)
         }
 
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-            onFinish(nil)
+            onFinish(false)
         }
     }
 }

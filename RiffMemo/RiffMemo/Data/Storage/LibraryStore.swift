@@ -30,14 +30,23 @@ final class LibraryStore {
         self.state = Self.open(using: makeContainer)
     }
 
-    /// Tries to open the store again (e.g. after the device frees space or unlocks).
-    /// No-op once the store has loaded.
+    /// User-initiated retry (e.g. after the device frees space). A failure is counted
+    /// so the UI can say so. No-op once the store has loaded.
     func retry() {
         guard case .failed = state else { return }
         state = Self.open(using: makeContainer)
         if case .failed = state {
             failedRetryCount += 1
         }
+    }
+
+    /// Silent retry for system events such as returning to the foreground: covers
+    /// transient causes (a prewarmed launch before first unlock, a full disk that has
+    /// since been cleared) without telling the user "still failing" for a retry they
+    /// never asked for. No-op once the store has loaded.
+    func retryAutomatically() {
+        guard case .failed = state else { return }
+        state = Self.open(using: makeContainer)
     }
 
     private static func open(using makeContainer: () throws -> ModelContainer) -> State {
@@ -68,17 +77,26 @@ final class LibraryStore {
         return try makeDefaultContainer()
     }
 
+    // WAS-51 added the iCloud/CloudKit entitlement so Recording's schema
+    // could be verified as CloudKit-compatible, but sync itself isn't
+    // live yet. SwiftData auto-enables CloudKit sync whenever the
+    // entitlement is present and no configuration says otherwise, so
+    // this stays local-only until sync is deliberately turned on.
+    nonisolated static var defaultConfiguration: ModelConfiguration {
+        ModelConfiguration(cloudKitDatabase: .none)
+    }
+
+    /// Where the store lives on disk, so recovery can back up the exact file
+    /// SwiftData tries to open rather than a hard-coded guess.
+    nonisolated static var defaultStoreURL: URL {
+        defaultConfiguration.url
+    }
+
     nonisolated static func makeDefaultContainer() throws -> ModelContainer {
-        // WAS-51 added the iCloud/CloudKit entitlement so Recording's schema
-        // could be verified as CloudKit-compatible, but sync itself isn't
-        // live yet. SwiftData auto-enables CloudKit sync whenever the
-        // entitlement is present and no configuration says otherwise, so
-        // this stays local-only until sync is deliberately turned on.
-        let configuration = ModelConfiguration(cloudKitDatabase: .none)
-        return try ModelContainer(
+        try ModelContainer(
             for: Schema(versionedSchema: RiffMemoSchemaV1.self),
             migrationPlan: RiffMemoMigrationPlan.self,
-            configurations: configuration
+            configurations: defaultConfiguration
         )
     }
 }

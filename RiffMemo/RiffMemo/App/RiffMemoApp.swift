@@ -29,12 +29,12 @@ struct RiffMemoApp: App {
                 )
             }
         }
-        .onChange(of: scenePhase) { oldPhase, newPhase in
-            // Transient causes (device locked, disk full) may have cleared while the
-            // user was away, so retry automatically on return. Only from .background,
-            // not the launch-time .inactive → .active, which would retry immediately.
-            if oldPhase == .background && newPhase == .active {
-                libraryStore.retry()
+        .onChange(of: scenePhase) { _, newPhase in
+            // Transient causes (a prewarmed launch before first unlock, a full disk)
+            // may have cleared by the time the app is actually in front of the user,
+            // so retry silently on every activation, including the first one.
+            if newPhase == .active {
+                libraryStore.retryAutomatically()
             }
         }
     }
