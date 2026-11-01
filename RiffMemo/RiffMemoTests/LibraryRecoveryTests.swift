@@ -90,4 +90,49 @@ final class LibraryRecoveryTests: XCTestCase {
 
         XCTAssertEqual(found, audioNames.sorted())
     }
+
+    func testStageForExportUsesDateNamesKeepsBytesAndLeavesOriginalsAlone() throws {
+        let sourceDirectory = tempDirectory.appendingPathComponent("source", isDirectory: true)
+        let stagingDirectory = tempDirectory.appendingPathComponent("staging", isDirectory: true)
+        try FileManager.default.createDirectory(at: sourceDirectory, withIntermediateDirectories: true)
+
+        // 2026-10-31 21:04:07 UTC; two takes in the same second must not collide.
+        let date = Date(timeIntervalSince1970: 1_793_480_647)
+        var sources: [URL] = []
+        for (index, name) in ["recording_A.caf", "recording_B.caf", "recording_C.caf"].enumerated() {
+            let url = sourceDirectory.appendingPathComponent(name)
+            try Data("take \(index)".utf8).write(to: url)
+            let takeDate = index < 2 ? date : date.addingTimeInterval(60)
+            try FileManager.default.setAttributes([.creationDate: takeDate], ofItemAtPath: url.path)
+            sources.append(url)
+        }
+
+        let staged = try AudioRecovery.stageForExport(
+            sources,
+            in: stagingDirectory,
+            timeZone: TimeZone(identifier: "UTC")!
+        )
+
+        XCTAssertEqual(staged.map(\.lastPathComponent), [
+            "RiffMemo 2026-10-31 at 21.04.07.caf",
+            "RiffMemo 2026-10-31 at 21.04.07 (2).caf",
+            "RiffMemo 2026-10-31 at 21.05.07.caf"
+        ])
+        for (source, stagedURL) in zip(sources, staged) {
+            XCTAssertEqual(try Data(contentsOf: stagedURL), try Data(contentsOf: source))
+            XCTAssertTrue(FileManager.default.fileExists(atPath: source.path), "Originals must never be moved")
+        }
+    }
+
+    func testStageForExportClearsPreviousStagingRun() throws {
+        let source = tempDirectory.appendingPathComponent("recording_A.caf")
+        try Data([0x01]).write(to: source)
+        let stagingDirectory = tempDirectory.appendingPathComponent("staging", isDirectory: true)
+
+        _ = try AudioRecovery.stageForExport([source], in: stagingDirectory)
+        let second = try AudioRecovery.stageForExport([source], in: stagingDirectory)
+
+        let contents = try FileManager.default.contentsOfDirectory(atPath: stagingDirectory.path)
+        XCTAssertEqual(contents, second.map(\.lastPathComponent), "A second export must not pick up \" (2)\" duplicates from the first")
+    }
 }

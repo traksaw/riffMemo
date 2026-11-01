@@ -20,16 +20,24 @@ final class LibraryStore {
     }
 
     private(set) var state: State
+    /// How many retries have failed since launch, so the UI can show that Retry
+    /// actually ran instead of looking like a dead button.
+    private(set) var failedRetryCount = 0
     private let makeContainer: () throws -> ModelContainer
 
-    init(makeContainer: @escaping () throws -> ModelContainer = LibraryStore.makeDefaultContainer) {
+    init(makeContainer: @escaping () throws -> ModelContainer = LibraryStore.makeLaunchContainer) {
         self.makeContainer = makeContainer
         self.state = Self.open(using: makeContainer)
     }
 
     /// Tries to open the store again (e.g. after the device frees space or unlocks).
+    /// No-op once the store has loaded.
     func retry() {
+        guard case .failed = state else { return }
         state = Self.open(using: makeContainer)
+        if case .failed = state {
+            failedRetryCount += 1
+        }
     }
 
     private static func open(using makeContainer: () throws -> ModelContainer) -> State {
@@ -39,6 +47,25 @@ final class LibraryStore {
             Logger.error("Failed to open library store: \(error)", category: Logger.data)
             return .failed(error)
         }
+    }
+
+    #if DEBUG
+    /// Launch argument that forces the store to fail, so the recovery screen can
+    /// be exercised by UI tests and on a device without corrupting real data.
+    nonisolated static let simulateOpenFailureArgument = "-simulateLibraryOpenFailure"
+
+    struct SimulatedOpenFailure: LocalizedError {
+        var errorDescription: String? { "Simulated library open failure (\(LibraryStore.simulateOpenFailureArgument))." }
+    }
+    #endif
+
+    nonisolated static func makeLaunchContainer() throws -> ModelContainer {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains(simulateOpenFailureArgument) {
+            throw SimulatedOpenFailure()
+        }
+        #endif
+        return try makeDefaultContainer()
     }
 
     nonisolated static func makeDefaultContainer() throws -> ModelContainer {

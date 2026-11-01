@@ -11,6 +11,8 @@ import UIKit
 /// broken database. Nothing here deletes or resets the store.
 struct LibraryRecoveryView: View {
     let error: any Error
+    /// Retries that have already failed; non-zero means Retry ran and the store still won't open.
+    let failedRetryCount: Int
     let onRetry: () -> Void
 
     @State private var filesToExport: [URL] = []
@@ -56,6 +58,14 @@ struct LibraryRecoveryView: View {
             }
             .controlSize(.large)
 
+            if failedRetryCount > 0 {
+                Text("Still can't open the library (tried \(failedRetryCount) time\(failedRetryCount == 1 ? "" : "s")). Exporting your audio is the safest next step.")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+                    .accessibilityIdentifier("libraryRecovery.retryFailed")
+            }
+
             if let exportMessage {
                 Text(exportMessage)
                     .font(.footnote)
@@ -76,7 +86,7 @@ struct LibraryRecoveryView: View {
             AudioExportPicker(urls: filesToExport) { exportedCount in
                 isExporting = false
                 if let exportedCount {
-                    exportMessage = "Exported \(exportedCount) audio file\(exportedCount == 1 ? "" : "s")."
+                    exportMessage = String(localized: "Exported \(exportedCount) of \(filesToExport.count) audio files.")
                 }
             }
             .ignoresSafeArea()
@@ -87,13 +97,13 @@ struct LibraryRecoveryView: View {
         do {
             let files = try AudioRecovery.audioFiles()
             guard !files.isEmpty else {
-                exportMessage = "No audio files were found on this device."
+                exportMessage = String(localized: "No audio files were found on this device.")
                 return
             }
-            filesToExport = files
+            filesToExport = try AudioRecovery.stageForExport(files)
             isExporting = true
         } catch {
-            exportMessage = "Couldn't read the audio folder: \(error.localizedDescription)"
+            exportMessage = String(localized: "Couldn't prepare your audio for export: \(error.localizedDescription)")
         }
     }
 }
@@ -137,6 +147,7 @@ private struct AudioExportPicker: UIViewControllerRepresentable {
 #Preview {
     LibraryRecoveryView(
         error: CocoaError(.fileReadCorruptFile),
+        failedRetryCount: 1,
         onRetry: {}
     )
 }
