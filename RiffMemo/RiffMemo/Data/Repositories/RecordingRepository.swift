@@ -33,6 +33,13 @@ class SwiftDataRecordingRepository: RecordingRepository {
         self.performSave = performSave ?? { try modelContext.save() }
     }
 
+    /// Explicitly nonisolated: with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` the
+    /// compiler routes this class's deinit through `swift_task_deinitOnExecutor`
+    /// (iOS 18 back-deploy shim), which aborts with a libmalloc error when the object
+    /// is released (seen from the test target on Xcode 26.1 and 27.1). The deinit does
+    /// no main-actor work, so it doesn't need the hop.
+    nonisolated deinit {}
+
     func fetchAll() async throws -> [Recording] {
         let descriptor = FetchDescriptor<Recording>(
             sortBy: [SortDescriptor(\.createdDate, order: .reverse)]

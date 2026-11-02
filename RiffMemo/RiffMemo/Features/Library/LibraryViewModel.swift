@@ -30,6 +30,13 @@ class LibraryViewModel {
     private let repository: RecordingRepository
     private let waveformGenerator = WaveformGenerator()
 
+    /// Explicitly nonisolated: with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` the
+    /// compiler routes this class's deinit through `swift_task_deinitOnExecutor`
+    /// (iOS 18 back-deploy shim), which aborts with a libmalloc error when the object
+    /// is released (seen from the test target on Xcode 26.1 and 27.1). The deinit does
+    /// no main-actor work, so it doesn't need the hop.
+    nonisolated deinit {}
+
     #if DEBUG
     /// Test-only seam: lets LibraryViewModelTests save fixtures without
     /// making `repository` non-private for production code.
