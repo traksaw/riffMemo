@@ -20,7 +20,6 @@ class RecordingViewModel {
     var isRecording: Bool = false
     var currentDuration: TimeInterval = 0
     var audioLevel: Float = 0.0
-    var frequencyMagnitudes: [Float] = []
     var waveformSamples: [Float] = []
     var detectedPitch: String?
 
@@ -75,14 +74,6 @@ class RecordingViewModel {
                     guard let self = self else { return }
                     Task { @MainActor [weak self] in
                         self?.audioLevel = level
-                    }
-                }
-
-                // Set up frequency data callback
-                await audioRecorder.onFrequencyData = { [weak self] frequencies in
-                    guard let self = self else { return }
-                    Task { @MainActor [weak self] in
-                        self?.frequencyMagnitudes = frequencies
                     }
                 }
 

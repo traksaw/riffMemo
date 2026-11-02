@@ -10,7 +10,6 @@ import Foundation
 /// start/stop/failure behavior deterministically without a real `AVAudioEngine`.
 final class MockAudioRecorder: AudioRecorderProtocol, @unchecked Sendable {
     var onAudioLevel: (@Sendable (Float) -> Void)?
-    var onFrequencyData: (@Sendable ([Float]) -> Void)?
     var onWaveformSample: (@Sendable (Float) -> Void)?
     var onRecordingFailed: (@Sendable (Error) -> Void)?
 

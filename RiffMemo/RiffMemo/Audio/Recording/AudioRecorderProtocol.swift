@@ -10,7 +10,6 @@ import Foundation
 /// planned in `RecordingViewModelTests.swift`.
 protocol AudioRecorderProtocol: AnyObject {
     var onAudioLevel: (@Sendable (Float) -> Void)? { get set }
-    var onFrequencyData: (@Sendable ([Float]) -> Void)? { get set }
     var onWaveformSample: (@Sendable (Float) -> Void)? { get set }
     var onRecordingFailed: (@Sendable (Error) -> Void)? { get set }
 

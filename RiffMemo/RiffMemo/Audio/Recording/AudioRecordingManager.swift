@@ -21,14 +21,8 @@ actor AudioRecordingManager {
     // Callback for real-time audio level updates
     nonisolated(unsafe) var onAudioLevel: (@Sendable (Float) -> Void)?
 
-    // Callback for real-time frequency data updates
-    nonisolated(unsafe) var onFrequencyData: (@Sendable ([Float]) -> Void)?
-
     // Callback for waveform sample updates (for live waveform visualization)
     nonisolated(unsafe) var onWaveformSample: (@Sendable (Float) -> Void)?
-
-    // Frequency analyzer
-    private var frequencyAnalyzer: FrequencyAnalyzer?
 
     // Callback fired when the render-thread tap hits an unrecoverable error (e.g. disk full)
     // and the recording is being torn down before the caller explicitly stopped it.
@@ -59,9 +53,6 @@ actor AudioRecordingManager {
 
         // Setup audio session
         try setupAudioSession()
-
-        // Initialize frequency analyzer
-        self.frequencyAnalyzer = FrequencyAnalyzer(bandCount: 32)
 
         // Setup audio engine
         try setupAudioEngine(session: recordingSession)
@@ -170,22 +161,7 @@ actor AudioRecordingManager {
         let file = try AVAudioFile(forWriting: audioFileURL, settings: format.settings)
         audioFile = file
 
-        // Captured as a local `let` — a plain class reference — rather than reading
-        // `self.frequencyAnalyzer` from inside the tap closure below. `frequencyAnalyzer` is
-        // an actor-isolated stored property; `startRecording()` sets it immediately before
-        // calling `setupAudioEngine()`, so snapshotting it here is safe, and it keeps the
-        // render-thread closure from touching actor-isolated state on every callback.
-        //
-        // IMPORTANT — ordering guarantee: this tap closure runs on Core Audio's real-time
-        // thread, entirely outside this actor's serial executor. It is only safe to use
-        // `analyzer` here because `stopRecording()` calls `inputNode.removeTap(onBus:)`
-        // BEFORE it nils out `frequencyAnalyzer` (and before the engine/file/inputNode are
-        // torn down). That ordering is what prevents this closure from running concurrently
-        // with actor-side cleanup — it is not enforced by the type system, so if
-        // `stopRecording()` is ever refactored, this ordering must be preserved.
-        let analyzer = self.frequencyAnalyzer
-
-        // Install tap to write audio data AND calculate levels AND analyze frequencies
+        // Install tap to write audio data and calculate levels
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in
             // Write audio to file. On failure, stop the recording rather than silently
             // producing a truncated file — hand off to the actor since tearing down
@@ -204,12 +180,6 @@ actor AudioRecordingManager {
                 if let callback = self?.onWaveformSample {
                     callback(level)
                 }
-            }
-
-            // Analyze and send frequency data
-            if let analyzer {
-                analyzer.analyze(buffer: buffer)
-                self?.onFrequencyData?(analyzer.frequencyMagnitudes)
             }
         }
 
@@ -271,7 +241,6 @@ actor AudioRecordingManager {
         audioEngine = nil
         audioFile = nil
         inputNode = nil
-        frequencyAnalyzer = nil
     }
 
     private nonisolated func calculateLevel(from buffer: AVAudioPCMBuffer) -> Float {

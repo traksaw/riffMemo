@@ -7,7 +7,7 @@ A native iOS app for musicians to capture, analyze, and organize musical ideas �
 
 ## Features
 
-- **One-tap recording** with a live waveform and frequency spectrum view
+- **One-tap recording** with a live waveform
 - **On-device audio analysis** — BPM detection, key detection, pitch detection, and recording quality scoring
 - **Built-in metronome and tuner**
 - **Library management** — search, organize, and review past recordings with waveform thumbnails
