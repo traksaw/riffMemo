@@ -10,29 +10,20 @@ import SwiftData
 /// WAS-50: RecordingRepository.delete(_:) must remove the underlying audio
 /// file, not just the SwiftData row — otherwise every deletion (including
 /// "delete all," which just loops over this method) leaks storage.
-///
-/// Deiniting a `SwiftDataRecordingRepository` (a @MainActor class from the
-/// app module, deallocated across the @testable boundary) crashes on this
-/// Xcode 26.1.1 / Swift 6.2.1 toolchain with a libmalloc corruption in
-/// `swift_task_deinitOnExecutorMainActorBackDeploy` — reproducible even with
-/// an untouched checkout of RecordingRepository.swift and no calls into it,
-/// so it's a toolchain bug, not something this fix introduced. Tests below
-/// intentionally leak the container/repository (never let them deinit) to
-/// route around it.
 @MainActor
 final class RecordingRepositoryDeleteTests: XCTestCase {
 
-    private static var leakedToAvoidToolchainDeinitCrash: [Any] = []
-
     var repository: SwiftDataRecordingRepository!
+    /// Held for the whole test: a `ModelContext` does not keep its container alive,
+    /// so a container that falls out of scope invalidates `mainContext`.
+    var container: ModelContainer!
     var createdFileURLs: [URL] = []
 
     override func setUpWithError() throws {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: Recording.self, configurations: configuration)
+        self.container = container
         let repository = SwiftDataRecordingRepository(modelContext: container.mainContext)
-        Self.leakedToAvoidToolchainDeinitCrash.append(container)
-        Self.leakedToAvoidToolchainDeinitCrash.append(repository)
         self.repository = repository
         createdFileURLs = []
     }
@@ -41,6 +32,10 @@ final class RecordingRepositoryDeleteTests: XCTestCase {
         for url in createdFileURLs {
             try? FileManager.default.removeItem(at: url)
         }
+
+        // Release dependents before the container whose context they use.
+        repository = nil
+        container = nil
     }
 
     // Recording.audioFileURL always resolves against the real Documents
@@ -138,10 +133,8 @@ final class RecordingRepositoryDeleteTests: XCTestCase {
     func testDeleteRestoresFileWhenDatabaseSaveFails() async throws {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: Recording.self, configurations: configuration)
-        Self.leakedToAvoidToolchainDeinitCrash.append(container)
 
         let savingRepository = SwiftDataRecordingRepository(modelContext: container.mainContext)
-        Self.leakedToAvoidToolchainDeinitCrash.append(savingRepository)
 
         let recording = try makeRecordingWithFile()
         try await savingRepository.save(recording)
@@ -150,7 +143,6 @@ final class RecordingRepositoryDeleteTests: XCTestCase {
             modelContext: container.mainContext,
             performSave: { throw InjectedSaveFailure() }
         )
-        Self.leakedToAvoidToolchainDeinitCrash.append(failingRepository)
 
         do {
             try await failingRepository.delete(recording)
@@ -169,7 +161,6 @@ final class RecordingRepositoryDeleteTests: XCTestCase {
         // against a fresh context instead — the same thing a relaunched app
         // would see reading the actually-persisted store.
         let freshRepository = SwiftDataRecordingRepository(modelContext: ModelContext(container))
-        Self.leakedToAvoidToolchainDeinitCrash.append(freshRepository)
 
         let fetched = try await freshRepository.fetch(by: recording.id)
         XCTAssertNotNil(fetched, "DB row should still exist in the persisted store after a failed save")

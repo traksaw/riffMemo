@@ -33,6 +33,17 @@ class SwiftDataRecordingRepository: RecordingRepository {
         self.performSave = performSave ?? { try modelContext.save() }
     }
 
+    /// Explicitly nonisolated: with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` the
+    /// compiler routes this class's deinit through `swift_task_deinitOnExecutor`
+    /// (iOS 18 back-deploy shim), which aborts with a libmalloc error when the object
+    /// is released (seen from the test target on Xcode 26.1 and 27.1). The deinit does
+    /// no main-actor work, so it doesn't need the hop. Swift 6.1 (CI's Xcode 16.4) has no
+    /// isolated deinits, so every deinit there is already nonisolated and the syntax
+    /// doesn't compile.
+    #if compiler(>=6.2)
+    nonisolated deinit {}
+    #endif
+
     func fetchAll() async throws -> [Recording] {
         let descriptor = FetchDescriptor<Recording>(
             sortBy: [SortDescriptor(\.createdDate, order: .reverse)]
