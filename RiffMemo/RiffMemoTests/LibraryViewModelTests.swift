@@ -9,28 +9,21 @@ import SwiftData
 
 /// WAS-59: LibraryViewModel now owns bulk-delete and rename so LibraryView can't
 /// reach past it into the repository or mutate `recording.title` directly.
-///
-/// Deiniting a `SwiftDataRecordingRepository` (a @MainActor class from the app
-/// module, deallocated across the @testable boundary) crashes on this
-/// Xcode 26.1.1 / Swift 6.2.1 toolchain — see RecordingRepositoryDeleteTests
-/// for the full explanation. Tests below leak the container/repository/view
-/// model to route around it.
 @MainActor
 final class LibraryViewModelTests: XCTestCase {
 
-    private static var leakedToAvoidToolchainDeinitCrash: [Any] = []
-
     var viewModel: LibraryViewModel!
+    /// Held for the whole test: a `ModelContext` does not keep its container alive,
+    /// so a container that falls out of scope invalidates `mainContext`.
+    var container: ModelContainer!
     var createdFileURLs: [URL] = []
 
     override func setUpWithError() throws {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: Recording.self, configurations: configuration)
+        self.container = container
         let repository = SwiftDataRecordingRepository(modelContext: container.mainContext)
         let viewModel = LibraryViewModel(repository: repository)
-        Self.leakedToAvoidToolchainDeinitCrash.append(container)
-        Self.leakedToAvoidToolchainDeinitCrash.append(repository)
-        Self.leakedToAvoidToolchainDeinitCrash.append(viewModel)
         self.viewModel = viewModel
         createdFileURLs = []
     }
@@ -39,6 +32,10 @@ final class LibraryViewModelTests: XCTestCase {
         for url in createdFileURLs {
             try? FileManager.default.removeItem(at: url)
         }
+
+        // Release dependents before the container whose context they use.
+        viewModel = nil
+        container = nil
     }
 
     // Recording.audioFileURL always resolves against the real Documents
