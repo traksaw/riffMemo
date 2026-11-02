@@ -259,62 +259,6 @@ struct RecordingView: View {
             }
         }
     }
-
-    /// Converts frequency magnitudes to waveform amplitudes
-    private func convertFrequenciesToWaveform() -> [Float] {
-        let magnitudes = viewModel.frequencyMagnitudes
-        guard !magnitudes.isEmpty else { return [] }
-
-        let waveformSampleCount = 100
-        let stride = max(1, magnitudes.count / waveformSampleCount)
-
-        var waveform: [Float] = []
-        for i in Swift.stride(from: 0, to: magnitudes.count, by: stride) {
-            if i < magnitudes.count {
-                waveform.append(magnitudes[i])
-            }
-        }
-
-        while waveform.count < waveformSampleCount {
-            waveform.append(0)
-        }
-        if waveform.count > waveformSampleCount {
-            waveform = Array(waveform.prefix(waveformSampleCount))
-        }
-
-        return waveform
-    }
-
-    /// Returns color for frequency band
-    private func colorForBand(at index: Int) -> BandColor {
-        let bandPosition = Float(index) / Float(viewModel.frequencyMagnitudes.count - 1)
-        let minFreq: Float = 20.0
-        let maxFreq: Float = 20000.0
-        let frequency = minFreq * pow(maxFreq / minFreq, bandPosition)
-
-        if frequency < 250 { return .bass }
-        else if frequency < 500 { return .lowMid }
-        else if frequency < 2000 { return .mid }
-        else if frequency < 6000 { return .highMid }
-        else { return .high }
-    }
-}
-
-// MARK: - Legend Item
-
-struct LegendItem: View {
-    let color: Color
-    let label: String
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(color)
-                .frame(width: 8, height: 8)
-            Text(label)
-                .foregroundColor(.secondary)
-        }
-    }
 }
 
 // MARK: - Beat Flash Indicator
