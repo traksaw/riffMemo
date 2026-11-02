@@ -19,6 +19,14 @@ jobs:
     timeout-minutes: 45
 
     env:
+      # App Store Connect rejects uploads built with an SDK older than iOS 26
+      # ("SDK version issue ... must be built with the iOS 26 SDK or later").
+      # macos-15's default Xcode is 16.4 (iOS 18.5 SDK), so this job selects
+      # the newest Xcode 26 that the macos-15 image also ships. DEVELOPER_DIR
+      # applies to every xcodebuild call in the job. ios-build.yml keeps
+      # Xcode 16.4 for tests. When the image drops 26.3, pick a newer one
+      # from the image's README.
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
       # Build number = GitHub's run counter. Every "Run workflow" click gets
