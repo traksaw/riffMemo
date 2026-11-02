@@ -1,0 +1,94 @@
+name: TestFlight
+
+# Manual only: a build reaches testers when someone presses "Run workflow"
+# in the Actions tab, never as a side effect of a merge.
+on:
+  workflow_dispatch:
+
+# Two uploads at once would race for the same signing session. Queue them.
+concurrency:
+  group: testflight
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    name: Archive and upload to TestFlight
+    # Same runner as ios-build.yml, for the same reason: Xcode 26.x hangs on
+    # GitHub-hosted macos-26 runners (actions/runner-images#13264).
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_PATH: ${{ runner.temp }}/AuthKey.p8
+      ARCHIVE_PATH: ${{ runner.temp }}/RiffMemo.xcarchive
+      EXPORT_PATH: ${{ runner.temp }}/export
+      # Build number = GitHub's run counter. Every "Run workflow" click gets
+      # a new, higher number, so TestFlight never sees a duplicate.
+      # Caveat: "Re-run jobs" on an old run reuses that run's number, and
+      # App Store Connect rejects the upload as a duplicate. Start a new run
+      # instead of re-running a failed one.
+      BUILD_NUMBER: ${{ github.run_number }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      # Signing uses an App Store Connect API key only. With
+      # -allowProvisioningUpdates, Xcode uses Apple's cloud-managed
+      # distribution certificate and creates the provisioning profile on
+      # the fly, so no .p12 certificate or profile is stored in this repo
+      # or its secrets. The key needs the Admin role (or the "Access to
+      # Cloud Managed Distribution Certificate" permission) for that.
+      - name: Write API key
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          if [ -z "$ASC_KEY_P8" ] || [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ]; then
+            echo "::error::Missing secret. Set ASC_KEY_P8, ASC_KEY_ID and ASC_ISSUER_ID."
+            exit 1
+          fi
+          printf '%s\n' "$ASC_KEY_P8" > "$ASC_KEY_PATH"
+          chmod 600 "$ASC_KEY_PATH"
+
+      - name: Archive
+        run: |
+          cd RiffMemo
+          xcodebuild archive \
+            -project RiffMemo.xcodeproj \
+            -scheme RiffMemo \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$ARCHIVE_PATH" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+
+      # destination=upload in ExportOptions.plist makes this step sign the
+      # app for App Store distribution and send it to App Store Connect.
+      - name: Export and upload
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$ARCHIVE_PATH" \
+            -exportPath "$EXPORT_PATH" \
+            -exportOptionsPlist .github/ExportOptions.plist \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+      - name: Summary
+        run: |
+          VERSION=$(/usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:CFBundleShortVersionString' "$ARCHIVE_PATH/Info.plist")
+          BUILD=$(/usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:CFBundleVersion' "$ARCHIVE_PATH/Info.plist")
+          echo "Uploaded RiffMemo $VERSION ($BUILD). App Store Connect processes it before it shows in TestFlight." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove API key
+        if: always()
+        run: rm -f "$ASC_KEY_PATH"
