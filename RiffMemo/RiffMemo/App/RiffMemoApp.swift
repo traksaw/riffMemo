@@ -15,6 +15,12 @@ struct RiffMemoApp: App {
     @State private var libraryStore = LibraryStore()
     @Environment(\.scenePhase) private var scenePhase
 
+    init() {
+        // WAS-114: subscribe before anything else can crash, so the report from a
+        // crash on the previous launch is received and kept for "Send Diagnostics".
+        DiagnosticsReporter.shared.start()
+    }
+
     var body: some Scene {
         WindowGroup {
             switch libraryStore.state {

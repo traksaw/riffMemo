@@ -17,6 +17,12 @@ struct SettingsView: View {
     @AppStorage("defaultExportQuality") private var defaultQuality: ExportQuality = .high
     @AppStorage("includeMetadataByDefault") private var includeMetadata = true
 
+    // WAS-114: crash and hang reports
+    @State private var diagnosticsCount = 0
+    @State private var diagnosticsExportURL: URL?
+    @State private var showsDeveloperTools = false
+    @State private var isConfirmingTestCrash = false
+
     var body: some View {
         NavigationStack {
             Form {
@@ -106,12 +112,73 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+
+                    if let diagnosticsExportURL {
+                        ShareLink(item: diagnosticsExportURL) {
+                            HStack {
+                                Text("Send Diagnostics")
+                                Spacer()
+                                Text("\(diagnosticsCount) \(diagnosticsCount == 1 ? "report" : "reports")")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    } else {
+                        HStack {
+                            Text("Diagnostics")
+                            Spacer()
+                            Text("No reports")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 } header: {
                     Label("About", systemImage: "info.circle")
+                } footer: {
+                    Text("Crash and hang reports stay on this iPhone. They leave it only if you send them.")
+                }
+
+                // WAS-114: TestFlight and Xcode builds only, decided at runtime.
+                // See InstallEnvironment for why this is not a compile-time flag.
+                if showsDeveloperTools {
+                    Section {
+                        Button("Force Test Crash", role: .destructive) {
+                            isConfirmingTestCrash = true
+                        }
+                    } header: {
+                        Label("Developer", systemImage: "hammer")
+                    } footer: {
+                        Text("Closes the app with a crash. The report shows under Diagnostics after the next launch.")
+                    }
                 }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.large)
+            .confirmationDialog(
+                "Crash RiffMemo now?",
+                isPresented: $isConfirmingTestCrash,
+                titleVisibility: .visible
+            ) {
+                Button("Crash Now", role: .destructive) {
+                    fatalError("WAS-114 forced test crash")
+                }
+            } message: {
+                Text("This tests crash reporting. Your recordings are not affected.")
+            }
+            .task {
+                refreshDiagnostics()
+                showsDeveloperTools = await InstallEnvironment.allowsDeveloperTools()
+            }
+        }
+    }
+
+    private func refreshDiagnostics() {
+        let store = DiagnosticsStore.makeDefault()
+        do {
+            diagnosticsCount = try store.reportURLs().count
+            diagnosticsExportURL = try store.makeExportFile()
+        } catch {
+            Logger.error("Failed to read diagnostic reports: \(error)", category: Logger.app)
+            diagnosticsCount = 0
+            diagnosticsExportURL = nil
         }
     }
 }
