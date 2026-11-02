@@ -21,9 +21,6 @@ jobs:
     env:
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-      ASC_KEY_PATH: ${{ runner.temp }}/AuthKey.p8
-      ARCHIVE_PATH: ${{ runner.temp }}/RiffMemo.xcarchive
-      EXPORT_PATH: ${{ runner.temp }}/export
       # Build number = GitHub's run counter. Every "Run workflow" click gets
       # a new, higher number, so TestFlight never sees a duplicate.
       # Caveat: "Re-run jobs" on an old run reuses that run's number, and
@@ -37,6 +34,18 @@ jobs:
 
       - name: Show Xcode version
         run: xcodebuild -version
+
+      # The `runner` context (runner.temp) is not available in job-level
+      # `env:`, so GitHub rejects the whole file. Set the paths here from
+      # the $RUNNER_TEMP shell variable; $GITHUB_ENV makes them visible to
+      # every later step.
+      - name: Set paths
+        run: |
+          {
+            echo "ASC_KEY_PATH=$RUNNER_TEMP/AuthKey.p8"
+            echo "ARCHIVE_PATH=$RUNNER_TEMP/RiffMemo.xcarchive"
+            echo "EXPORT_PATH=$RUNNER_TEMP/export"
+          } >> "$GITHUB_ENV"
 
       # Signing uses an App Store Connect API key only. With
       # -allowProvisioningUpdates, Xcode uses Apple's cloud-managed
