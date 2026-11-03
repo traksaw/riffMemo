@@ -5,6 +5,7 @@
 
 import Foundation
 import MetricKit
+import OSLog
 
 /// WAS-114: receives crash and hang reports from MetricKit and stores them on the
 /// device. MetricKit is Apple's own reporting, so no third-party SDK is involved.
@@ -38,7 +39,7 @@ nonisolated final class DiagnosticsReporter: NSObject, MXMetricManagerSubscriber
             do {
                 try store.save(payload.jsonRepresentation())
             } catch {
-                Logger.error("Failed to save diagnostic report: \(error)", category: Logger.app)
+                Logger.app.error("Failed to save diagnostic report: [\(error.logCode, privacy: .public)] \(error)")
             }
         }
     }

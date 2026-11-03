@@ -7,6 +7,7 @@
 
 import Foundation
 import SwiftData
+import OSLog
 
 /// Protocol for recording data operations
 protocol RecordingRepository {
@@ -61,7 +62,7 @@ class SwiftDataRecordingRepository: RecordingRepository {
     func save(_ recording: Recording) async throws {
         modelContext.insert(recording)
         try performSave()
-        Logger.info("Recording saved: \(recording.title)", category: Logger.data)
+        Logger.data.info("Recording saved: \(recording.title)")
     }
 
     /// Delete operations own both the SwiftData row and its associated audio
@@ -90,7 +91,7 @@ class SwiftDataRecordingRepository: RecordingRepository {
         if let stagedURL {
             try? FileManager.default.removeItem(at: stagedURL)
         }
-        Logger.info("Recording deleted: \(recording.title)", category: Logger.data)
+        Logger.data.info("Recording deleted: \(recording.title)")
     }
 
     /// Moves the audio file into a staging directory instead of removing it,
@@ -107,7 +108,7 @@ class SwiftDataRecordingRepository: RecordingRepository {
             try FileManager.default.moveItem(at: url, to: stagedURL)
             return stagedURL
         } catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == NSFileNoSuchFileError {
-            Logger.info("Audio file already absent, skipping: \(url.lastPathComponent)", category: Logger.data)
+            Logger.data.info("Audio file already absent, skipping: \(url.lastPathComponent)")
             return nil
         }
     }
@@ -115,6 +116,6 @@ class SwiftDataRecordingRepository: RecordingRepository {
     func update(_ recording: Recording) async throws {
         recording.modifiedDate = Date()
         try performSave()
-        Logger.info("Recording updated: \(recording.title)", category: Logger.data)
+        Logger.data.info("Recording updated: \(recording.title)")
     }
 }

@@ -8,6 +8,7 @@
 import Foundation
 import AVFoundation
 import Combine
+import OSLog
 
 /// Shared metronome service for use across the app
 /// Can be used both in standalone metronome and as click track during recording
@@ -162,7 +163,7 @@ class SharedMetronomeService: ObservableObject {
 
         // Debug: Log visual-only mode state
         #if DEBUG
-        Logger.info("Metronome initialized - Visual Only: \(visualOnlyMode), Volume: \(volume)", category: Logger.audio)
+        Logger.audio.info("Metronome initialized - Visual Only: \(self.visualOnlyMode), Volume: \(self.volume)")
         #endif
     }
 
@@ -192,9 +193,9 @@ class SharedMetronomeService: ObservableObject {
 
             startTimer()
 
-            Logger.info("Shared metronome started (standalone) at \(bpm) BPM - Using sample-accurate timing", category: Logger.audio)
+            Logger.audio.info("Shared metronome started (standalone) at \(self.bpm) BPM - Using sample-accurate timing")
         } catch {
-            Logger.error("Failed to start metronome: \(error)", category: Logger.audio)
+            Logger.audio.error("Failed to start metronome: [\(error.logCode, privacy: .public)] \(error)")
             errorMessage = "Failed to start metronome: \(error.localizedDescription)"
             showError = true
             isPlaying = false
@@ -233,9 +234,9 @@ class SharedMetronomeService: ObservableObject {
             startTimer()
             // Don't call playBeat() manually - let the timer handle all beats consistently
 
-            Logger.info("Shared metronome started with \(timeSignature.beatsPerMeasure)-beat pre-count at \(bpm) BPM - Using sample-accurate timing", category: Logger.audio)
+            Logger.audio.info("Shared metronome started with \(self.timeSignature.beatsPerMeasure)-beat pre-count at \(self.bpm) BPM - Using sample-accurate timing")
         } catch {
-            Logger.error("Failed to start metronome with pre-count: \(error)", category: Logger.audio)
+            Logger.audio.error("Failed to start metronome with pre-count: [\(error.logCode, privacy: .public)] \(error)")
             errorMessage = "Failed to start metronome: \(error.localizedDescription)"
             showError = true
             isPlaying = false
@@ -264,7 +265,7 @@ class SharedMetronomeService: ObservableObject {
         nextBeatSampleTime = 0
         isFirstBeatScheduled = false
 
-        Logger.info("Shared metronome stopped", category: Logger.audio)
+        Logger.audio.info("Shared metronome stopped")
     }
 
     func setBPM(_ newBPM: Double) {
@@ -478,7 +479,7 @@ class SharedMetronomeService: ObservableObject {
         self.playerNode = player
         self.mixer = mixer
 
-        Logger.info("Audio engine started - sampleRate: \(format.sampleRate), channels: \(format.channelCount)", category: Logger.audio)
+        Logger.audio.info("Audio engine started - sampleRate: \(format.sampleRate), channels: \(format.channelCount)")
     }
 
     private func generateClickSounds() {
@@ -547,7 +548,7 @@ class SharedMetronomeService: ObservableObject {
             )
         }
 
-        Logger.info("Click sounds generated: \(clickSound.rawValue) style with subdivisions", category: Logger.audio)
+        Logger.audio.info("Click sounds generated: \(self.clickSound.rawValue, privacy: .public) style with subdivisions")
     }
 
     private func generateClickBuffer(frequency: Double, duration: TimeInterval, amplitude: Float, soundType: SoundType, sampleRate: Double) -> AVAudioPCMBuffer? {
@@ -556,7 +557,7 @@ class SharedMetronomeService: ObservableObject {
         // Use the EXACT format from the audio engine to avoid format conversion
         guard let engineFormat = audioEngine?.mainMixerNode.outputFormat(forBus: 0),
               let buffer = AVAudioPCMBuffer(pcmFormat: engineFormat, frameCapacity: frameCount) else {
-            Logger.error("Failed to create buffer with engine format", category: Logger.audio)
+            Logger.audio.error("Failed to create buffer with engine format")
             return nil
         }
 
@@ -623,7 +624,7 @@ class SharedMetronomeService: ObservableObject {
         timer.resume()
         dispatchTimer = timer
 
-        Logger.info("Timer started with interval: \(interval)s", category: Logger.audio)
+        Logger.audio.info("Timer started with interval: \(interval)s")
     }
 
     private func checkAndPlayBeat() {
@@ -705,7 +706,7 @@ class SharedMetronomeService: ObservableObject {
         // Guard: Stop playing if pre-count has finished (prevents going negative)
         guard preCountRemaining > 0 else {
             #if DEBUG
-            Logger.debug("Pre-count already complete, skipping beat", category: Logger.audio)
+            Logger.audio.debug("Pre-count already complete, skipping beat")
             #endif
             return
         }
@@ -736,7 +737,7 @@ class SharedMetronomeService: ObservableObject {
 
         // Debug logging
         #if DEBUG
-        Logger.debug("Pre-count \(preCountDisplayNumber): \(isDownbeat ? "ACCENT/DOWNBEAT (2000Hz/LOUD)" : "regular (600Hz/soft)") - beat \(timeSignature.beatsPerMeasure - preCountRemaining + 1) of \(timeSignature.beatsPerMeasure)", category: Logger.audio)
+        Logger.audio.debug("Pre-count \(self.preCountDisplayNumber): \(isDownbeat ? "ACCENT/DOWNBEAT (2000Hz/LOUD)" : "regular (600Hz/soft)", privacy: .public) - beat \(self.timeSignature.beatsPerMeasure - self.preCountRemaining + 1) of \(self.timeSignature.beatsPerMeasure)")
         #endif
 
         // Decrement counter AFTER playing
@@ -762,7 +763,7 @@ class SharedMetronomeService: ObservableObject {
                 self.state = .recording
                 self.currentBeat = 0  // Reset to 0 so next beat will be the accent downbeat
 
-                Logger.info("Pre-count complete → transitioned to recording", category: Logger.audio)
+                Logger.audio.info("Pre-count complete → transitioned to recording")
             }
 
             // Don't increment currentBeat - we want to start recording on beat 0 (accent)
@@ -814,7 +815,7 @@ class SharedMetronomeService: ObservableObject {
 
         // Get sample rate for timing calculations
         guard let sampleRate = audioEngine?.mainMixerNode.outputFormat(forBus: 0).sampleRate else {
-            Logger.error("Cannot get sample rate for timing", category: Logger.audio)
+            Logger.audio.error("Cannot get sample rate for timing")
             return
         }
 
@@ -881,7 +882,7 @@ class SharedMetronomeService: ObservableObject {
         let beatNumber = currentBeat + 1
         let stateLabel = state == .recording ? "Recording" : "Standalone"
         let clickType = isDownbeat ? "ACCENT/DOWNBEAT" : (isMainBeat ? "regular beat" : "subdivision \(subdivisionCounter)")
-        Logger.debug("\(stateLabel) Beat \(beatNumber).\(subdivisionCounter): \(clickType)", category: Logger.audio)
+        Logger.audio.debug("\(stateLabel, privacy: .public) Beat \(beatNumber).\(self.subdivisionCounter): \(clickType, privacy: .public)")
         #endif
 
         advanceBeatState(isDownbeat: isDownbeat, isMainBeat: isMainBeat, clicksPerBeat: clicksPerBeat)

@@ -7,6 +7,7 @@
 
 import Foundation
 import AVFoundation
+import OSLog
 
 /// Handles audio export with format conversion and quality settings
 actor AudioExportEngine {
@@ -22,7 +23,7 @@ actor AudioExportEngine {
         from sourceURL: URL,
         settings: ExportSettings
     ) async throws -> URL {
-        Logger.info("Exporting audio: \(sourceURL.lastPathComponent) to \(settings.format.rawValue)", category: Logger.audio)
+        Logger.audio.info("Exporting audio: \(sourceURL.lastPathComponent) to \(settings.format.rawValue, privacy: .public)")
 
         // Create destination URL
         let destinationURL = try createDestinationURL(for: settings.format, basedOn: sourceURL)
@@ -31,7 +32,7 @@ actor AudioExportEngine {
         if settings.format == .caf {
             // No conversion needed, just copy
             try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
-            Logger.info("Copied original file (no conversion needed)", category: Logger.audio)
+            Logger.audio.info("Copied original file (no conversion needed)")
             return destinationURL
         }
 
@@ -120,17 +121,17 @@ actor AudioExportEngine {
                     await writer.finishWriting()
 
                     if writer.status == .completed {
-                        Logger.info("Export complete: \(destinationURL.lastPathComponent)", category: Logger.audio)
+                        Logger.audio.info("Export complete: \(destinationURL.lastPathComponent)")
                         continuation.resume(returning: destinationURL)
                     } else if let error = writer.error {
-                        Logger.error("Writer failed: \(error)", category: Logger.audio)
+                        Logger.audio.error("Writer failed: [\(error.logCode, privacy: .public)] \(error)")
                         continuation.resume(throwing: ExportError.exportFailed(error))
                     } else {
                         continuation.resume(throwing: ExportError.exportIncomplete)
                     }
 
                 } catch {
-                    Logger.error("Audio conversion failed: \(error)", category: Logger.audio)
+                    Logger.audio.error("Audio conversion failed: [\(error.logCode, privacy: .public)] \(error)")
                     continuation.resume(throwing: ExportError.exportFailed(error))
                 }
             }
@@ -196,7 +197,7 @@ actor AudioExportEngine {
                 onProgress?(progress)
 
             } catch {
-                Logger.error("Failed to export \(recording.title): \(error)", category: Logger.audio)
+                Logger.audio.error("Failed to export \(recording.title): [\(error.logCode, privacy: .public)] \(error)")
                 throw error
             }
         }

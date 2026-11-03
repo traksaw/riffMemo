@@ -5,6 +5,7 @@
 
 import SwiftUI
 import UIKit
+import OSLog
 
 /// WAS-121: shown instead of the app when the library store can't be opened.
 /// Offers Retry and a raw-audio export so takes are never held hostage by a
@@ -118,7 +119,7 @@ struct LibraryRecoveryView: View {
         }.value
 
         if case .success(let staged) = result, !staged.skippedFiles.isEmpty {
-            Logger.error("Recovery export skipped unreadable files: \(staged.skippedFiles)", category: Logger.data)
+            Logger.data.error("Recovery export skipped unreadable files: \(staged.skippedFiles)")
         }
 
         switch result {

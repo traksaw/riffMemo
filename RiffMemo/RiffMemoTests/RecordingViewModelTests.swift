@@ -6,6 +6,7 @@
 //
 
 import XCTest
+import OSLog
 @testable import RiffMemo
 
 /// Basic unit tests for RecordingViewModel

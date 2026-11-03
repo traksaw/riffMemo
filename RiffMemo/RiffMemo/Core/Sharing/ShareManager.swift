@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UIKit
+import OSLog
 
 /// Manages sharing functionality for recordings
 @MainActor
@@ -49,10 +50,10 @@ class ShareManager {
             // Present share sheet
             await presentShareSheet(items: items, from: sourceView)
 
-            Logger.info("Shared recording: \(recording.title)", category: Logger.app)
+            Logger.app.info("Shared recording: \(recording.title)")
 
         } catch {
-            Logger.error("Failed to share recording: \(error)", category: Logger.app)
+            Logger.app.error("Failed to share recording: [\(error.logCode, privacy: .public)] \(error)")
         }
     }
 
@@ -67,7 +68,7 @@ class ShareManager {
         from sourceView: UIView? = nil
     ) async {
         do {
-            Logger.info("Sharing \(recordings.count) recordings", category: Logger.app)
+            Logger.app.info("Sharing \(recordings.count) recordings")
 
             // Export all recordings
             let exportEngine = AudioExportEngine()
@@ -91,10 +92,10 @@ class ShareManager {
             // Present share sheet
             await presentShareSheet(items: [zipURL], from: sourceView)
 
-            Logger.info("Shared \(recordings.count) recordings as zip", category: Logger.app)
+            Logger.app.info("Shared \(recordings.count) recordings as zip")
 
         } catch {
-            Logger.error("Failed to share multiple recordings: \(error)", category: Logger.app)
+            Logger.app.error("Failed to share multiple recordings: [\(error.logCode, privacy: .public)] \(error)")
         }
     }
 
@@ -176,9 +177,9 @@ class ShareManager {
                 // Create zip archive (iOS 13+ supports this natively)
                 try FileManager.default.zipItem(at: urls[0], to: newURL)
 
-                Logger.info("Created zip archive: \(newURL.lastPathComponent)", category: Logger.app)
+                Logger.app.info("Created zip archive: \(newURL.lastPathComponent)")
             } catch {
-                Logger.error("Zip creation error: \(error)", category: Logger.app)
+                Logger.app.error("Zip creation error: [\(error.logCode, privacy: .public)] \(error)")
             }
         }
 

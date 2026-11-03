@@ -7,6 +7,7 @@
 
 import Foundation
 import Observation
+import OSLog
 
 /// ViewModel for managing waveform data loading and caching
 @MainActor
@@ -47,7 +48,7 @@ class WaveformViewModel {
     func loadWaveform() async {
         // Tier 1: Check if already loaded in memory
         if !samples.isEmpty {
-            Logger.info("Waveform already loaded in memory", category: Logger.audio)
+            Logger.audio.info("Waveform already loaded in memory")
             return
         }
 
@@ -57,14 +58,14 @@ class WaveformViewModel {
         do {
             // Tier 2: Check if waveform is cached in SwiftData
             if let cachedData = recording.waveformData {
-                Logger.info("Loading cached waveform from database", category: Logger.audio)
+                Logger.audio.info("Loading cached waveform from database")
                 samples = await waveformGenerator.decodeWaveform(from: cachedData)
                 isLoading = false
                 return
             }
 
             // Tier 3: Generate new waveform
-            Logger.info("Generating new waveform for recording", category: Logger.audio)
+            Logger.audio.info("Generating new waveform for recording")
             let generatedSamples = try await waveformGenerator.generateWaveform(
                 from: recording.audioFileURL,
                 targetSamples: targetSamples
@@ -80,12 +81,12 @@ class WaveformViewModel {
             samples = generatedSamples
             isLoading = false
 
-            Logger.info("Waveform generated and cached", category: Logger.audio)
+            Logger.audio.info("Waveform generated and cached")
 
         } catch {
             loadError = "Failed to load waveform: \(error.localizedDescription)"
             isLoading = false
-            Logger.error("Failed to load waveform: \(error)", category: Logger.audio)
+            Logger.audio.error("Failed to load waveform: [\(error.logCode, privacy: .public)] \(error)")
         }
     }
 
@@ -93,7 +94,7 @@ class WaveformViewModel {
     func clearCache() {
         samples = []
         recording.waveformData = nil
-        Logger.info("Waveform cache cleared", category: Logger.audio)
+        Logger.audio.info("Waveform cache cleared")
     }
 
     /// Regenerates the waveform from scratch

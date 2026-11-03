@@ -8,6 +8,7 @@
 import Foundation
 import AVFoundation
 import Accelerate
+import OSLog
 
 /// Detects musical key using pitch class profile and Krumhansl-Schmuckler algorithm
 actor KeyDetector {
@@ -30,12 +31,12 @@ actor KeyDetector {
     /// - Parameter url: URL of the audio file
     /// - Returns: Detected key (e.g., "C Major", "A Minor"), or nil if detection failed
     func detectKey(from url: URL) async throws -> String? {
-        Logger.info("Detecting key from \(url.lastPathComponent)", category: Logger.audio)
+        Logger.audio.info("Detecting key from \(url.lastPathComponent)")
 
         let loaded = try AudioSampleLoader.load(from: url)
         let key = detectKey(samples: loaded.samples, sampleRate: loaded.sampleRate)
 
-        Logger.info("Detected key: \(key ?? "Unknown")", category: Logger.audio)
+        Logger.audio.info("Detected key: \(key ?? "Unknown", privacy: .public)")
 
         return key
     }

@@ -6,6 +6,7 @@
 import Foundation
 import Observation
 import SwiftData
+import OSLog
 
 /// Owns opening the SwiftData library. WAS-121: a failed `ModelContainer` used to
 /// `fatalError`, which crashed every launch until the user deleted the app (and every
@@ -64,7 +65,7 @@ final class LibraryStore {
         do {
             return .loaded(try makeContainer())
         } catch {
-            Logger.error("Failed to open library store: \(error)", category: Logger.data)
+            Logger.data.error("Failed to open library store: [\(error.logCode, privacy: .public)] \(error)")
             return .failed(error)
         }
     }

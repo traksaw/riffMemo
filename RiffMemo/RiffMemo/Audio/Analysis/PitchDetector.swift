@@ -9,6 +9,7 @@ import Foundation
 import AVFoundation
 import Accelerate
 import Combine
+import OSLog
 
 /// Real-time pitch detection for tuner functionality
 @MainActor
@@ -56,7 +57,7 @@ class PitchDetector: ObservableObject {
         try setupAudioEngine()
 
         isDetecting = true
-        Logger.info("Pitch detection started", category: Logger.audio)
+        Logger.audio.info("Pitch detection started")
     }
 
     func stopDetection() async {
@@ -73,7 +74,7 @@ class PitchDetector: ObservableObject {
         note = ""
         cents = 0.0
 
-        Logger.info("Pitch detection stopped", category: Logger.audio)
+        Logger.audio.info("Pitch detection stopped")
     }
 
     // MARK: - Private Methods

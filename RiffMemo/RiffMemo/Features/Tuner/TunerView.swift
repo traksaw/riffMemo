@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import OSLog
 
 struct TunerView: View {
     @StateObject private var pitchDetector = PitchDetector()
@@ -128,7 +129,7 @@ struct TunerView: View {
                     try await pitchDetector.startDetection()
                     HapticManager.shared.mediumTap()
                 } catch {
-                    Logger.error("Failed to start tuner: \(error)", category: Logger.audio)
+                    Logger.audio.error("Failed to start tuner: [\(error.logCode, privacy: .public)] \(error)")
                 }
             }
         }

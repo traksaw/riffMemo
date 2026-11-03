@@ -7,6 +7,7 @@
 
 import Foundation
 import Accelerate
+import OSLog
 
 /// Actor responsible for generating waveform data from audio files
 /// Uses downsampling to create manageable data for visualization
@@ -20,7 +21,7 @@ actor WaveformGenerator {
     ///   - targetSamples: Number of samples to generate (default: 300 for typical screen widths)
     /// - Returns: Array of normalized amplitude values (0.0 to 1.0)
     func generateWaveform(from url: URL, targetSamples: Int = 300) async throws -> [Float] {
-        Logger.info("Generating waveform for \(url.lastPathComponent) with \(targetSamples) samples", category: Logger.audio)
+        Logger.audio.info("Generating waveform for \(url.lastPathComponent) with \(targetSamples) samples")
 
         let loaded = try AudioSampleLoader.load(from: url)
         let samples = loaded.samples
@@ -31,7 +32,7 @@ actor WaveformGenerator {
         // Normalize to 0.0 - 1.0 range
         let normalized = normalize(samples: downsampled)
 
-        Logger.info("Waveform generated: \(normalized.count) samples", category: Logger.audio)
+        Logger.audio.info("Waveform generated: \(normalized.count) samples")
 
         return normalized
     }
