@@ -8,9 +8,10 @@ function, file and line, using the dSYM from the same build.
 Usage:
     scripts/symbolicate-diagnostics.py RiffMemo-diagnostics.json RiffMemo.app.dSYM
 
-Get the dSYM from the TestFlight run's "RiffMemo-<build>-dSYM" artifact, or
-from App Store Connect (TestFlight > the build > Build Metadata > Download dSYM).
-The build number in the report and in the dSYM must match.
+Get the dSYM from the TestFlight run's "RiffMemo-<build>-dSYM" artifact.
+App Store Connect does not offer a dSYM download, and a local rebuild gives a
+different binary, so builds made before that artifact existed (1 to 5) cannot
+be read this way. The script checks the binary UUID and stops on a mismatch.
 """
 
 import json
@@ -33,6 +34,23 @@ def flatten(frames):
     return out
 
 
+def dsym_uuids(dwarf: Path):
+    """The binary UUIDs this dSYM describes (one per architecture)."""
+    result = subprocess.run(["xcrun", "dwarfdump", "--uuid", str(dwarf)],
+                            capture_output=True, text=True, check=True)
+    return {line.split()[1].upper() for line in result.stdout.splitlines() if line.startswith("UUID:")}
+
+
+def check_uuid(frames, uuids):
+    """A dSYM from any other build maps offsets to the wrong functions, with no
+    error from atos. MetricKit records the exact binary UUID, so compare first."""
+    for frame in frames:
+        reported = (frame.get("binaryUUID") or "").upper()
+        if frame.get("binaryName") == APP_BINARY and reported and reported not in uuids:
+            sys.exit(f"dSYM does not match this report: report binary {reported}, "
+                     f"dSYM {', '.join(sorted(uuids))}. Use the dSYM from the same build.")
+
+
 def symbolicate(dwarf: Path, offsets):
     addresses = [hex(TEXT_BASE + o) for o in offsets]
     result = subprocess.run(
@@ -50,6 +68,7 @@ def main():
     dwarf = dsym / "Contents" / "Resources" / "DWARF" / APP_BINARY
     if not dwarf.exists():
         sys.exit(f"No DWARF file at {dwarf}. Pass the RiffMemo.app.dSYM folder.")
+    uuids = dsym_uuids(dwarf)
 
     print(f"{export.get('app')} {export.get('version')} ({export.get('build')})")
     for number, report in enumerate(export.get("reports", []), start=1):
@@ -63,6 +82,7 @@ def main():
                     if not stack.get("threadAttributed"):
                         continue  # Only the thread that crashed or hung.
                     frames = flatten(stack.get("callStackRootFrames", []))
+                    check_uuid(frames, uuids)
                     app_offsets = [f["offsetIntoBinaryTextSegment"] for f in frames
                                    if f.get("binaryName") == APP_BINARY]
                     names = iter(symbolicate(dwarf, app_offsets)) if app_offsets else iter(())
