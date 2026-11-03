@@ -100,6 +100,21 @@ jobs:
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 
+      # WAS-114: crash reports from "Send Diagnostics" name code only as
+      # "RiffMemo +<offset>". The dSYM turns offsets into function names, and
+      # it must come from this exact build. Keep it next to the run, for as
+      # long as the TestFlight build lives (90 days). The repo is public, so
+      # anyone signed in to GitHub can download it; that reveals nothing the
+      # public source does not. To read a report:
+      #   scripts/symbolicate-diagnostics.py <diagnostics.json> <RiffMemo.app.dSYM>
+      - name: Keep dSYM
+        uses: actions/upload-artifact@v4
+        with:
+          name: RiffMemo-${{ env.BUILD_NUMBER }}-dSYM
+          path: ${{ env.ARCHIVE_PATH }}/dSYMs
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Summary
         run: |
           VERSION=$(/usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:CFBundleShortVersionString' "$ARCHIVE_PATH/Info.plist")
