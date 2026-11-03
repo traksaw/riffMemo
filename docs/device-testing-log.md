@@ -29,6 +29,20 @@ TestFlight app (orange dot before the name) is installed now.
 
 ## Test entries
 
+### 2026-11-03 — TestFlight 1.0 (8) installed after a compliance hold
+
+- Build: TestFlight 1.0 (8), from `main` at `6b2861a` (the WAS-165 merge).
+  Installed with **Update** in TestFlight. It replaced the cable-installed
+  branch build, and the orange dot came back. Recordings stayed.
+- Gotcha: build 8 uploaded fine but never reached the phone. App Store
+  Connect held it in **Missing Compliance**, because the app did not declare
+  `ITSAppUsesNonExemptEncryption`. Builds 4, 6, and 7 were stuck the same way.
+  Fix for build 8: App Store Connect → TestFlight → build → **Manage** →
+  "None of the algorithms mentioned above" → Save. PR #47 sets the key to
+  `NO`, so later builds skip the question.
+- Note: build numbers come from `github.run_number`, so they skip numbers
+  (5, then 8). That is fine; they only need to go up.
+
 ### 2026-11-03 — WAS-165: titles are `<private>` in device logs
 
 - Build: Release build of the WAS-165 branch, installed over cable with
