@@ -86,7 +86,7 @@ class WaveformViewModel {
         } catch {
             loadError = "Failed to load waveform: \(error.localizedDescription)"
             isLoading = false
-            Logger.audio.error("Failed to load waveform: \(error)")
+            Logger.audio.error("Failed to load waveform: [\(error.logCode, privacy: .public)] \(error)")
         }
     }
 

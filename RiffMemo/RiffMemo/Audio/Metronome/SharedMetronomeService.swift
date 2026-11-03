@@ -195,7 +195,7 @@ class SharedMetronomeService: ObservableObject {
 
             Logger.audio.info("Shared metronome started (standalone) at \(self.bpm) BPM - Using sample-accurate timing")
         } catch {
-            Logger.audio.error("Failed to start metronome: \(error)")
+            Logger.audio.error("Failed to start metronome: [\(error.logCode, privacy: .public)] \(error)")
             errorMessage = "Failed to start metronome: \(error.localizedDescription)"
             showError = true
             isPlaying = false
@@ -236,7 +236,7 @@ class SharedMetronomeService: ObservableObject {
 
             Logger.audio.info("Shared metronome started with \(self.timeSignature.beatsPerMeasure)-beat pre-count at \(self.bpm) BPM - Using sample-accurate timing")
         } catch {
-            Logger.audio.error("Failed to start metronome with pre-count: \(error)")
+            Logger.audio.error("Failed to start metronome with pre-count: [\(error.logCode, privacy: .public)] \(error)")
             errorMessage = "Failed to start metronome: \(error.localizedDescription)"
             showError = true
             isPlaying = false

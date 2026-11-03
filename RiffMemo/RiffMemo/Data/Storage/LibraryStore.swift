@@ -65,7 +65,7 @@ final class LibraryStore {
         do {
             return .loaded(try makeContainer())
         } catch {
-            Logger.data.error("Failed to open library store: \(error)")
+            Logger.data.error("Failed to open library store: [\(error.logCode, privacy: .public)] \(error)")
             return .failed(error)
         }
     }

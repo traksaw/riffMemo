@@ -69,7 +69,7 @@ class RecordingDetailViewModel {
                 errorMessage = "Failed to play recording: \(error.localizedDescription)"
                 showError = true
                 isPlaying = false
-                Logger.audio.error("Failed to play recording: \(error)")
+                Logger.audio.error("Failed to play recording: [\(error.logCode, privacy: .public)] \(error)")
             }
         }
     }

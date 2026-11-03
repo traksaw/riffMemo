@@ -39,3 +39,18 @@ identifier_name:
     - id
     - x
     - y
+
+custom_rules:
+  # WAS-165: titles, file names, paths, and error text must stay private in device logs
+  # ("audio stays on this iPhone"). Mark `.public` only on values that identify nothing:
+  # counts, durations, states, and `error.logCode`. See Core/Utilities/Logger.swift.
+  # Matches one interpolation `\( … privacy: .public)` whose expression names a private
+  # kind of value. `error.logCode` is allowed; a bare `error` is not.
+  public_log_of_private_value:
+    name: "Public log of a private value"
+    regex: '(?i)\\\([^\\]*?(title|name|path|url|file|lastpathcomponent|localizeddescription|\berror\b(?!\.logcode))[^\\]*?privacy:\s*\.public'
+    message: "Titles, names, paths, URLs, and error text must stay private in logs. Remove `privacy: .public`, or log `error.logCode` instead of the error."
+    severity: error
+    excluded_match_kinds:
+      - comment
+      - doccomment

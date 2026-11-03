@@ -215,7 +215,7 @@ actor AudioRecordingManager {
         guard failureError == nil else { return }
         failureError = error
 
-        Logger.audio.error("Audio write failed, stopping recording: \(error)")
+        Logger.audio.error("Audio write failed, stopping recording: [\(error.logCode, privacy: .public)] \(error)")
 
         // If stopRecording() already claimed the stop (isRecording is already false), it will
         // pick up `failureError` itself after its flush sleep and clear state there — don't

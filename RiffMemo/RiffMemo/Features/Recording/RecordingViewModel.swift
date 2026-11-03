@@ -106,7 +106,7 @@ class RecordingViewModel {
             } catch {
                 errorMessage = "Failed to start recording: \(error.localizedDescription)"
                 showError = true
-                Logger.audio.error("Failed to start recording: \(error)")
+                Logger.audio.error("Failed to start recording: [\(error.logCode, privacy: .public)] \(error)")
             }
         }
     }
@@ -155,7 +155,7 @@ class RecordingViewModel {
                 errorMessage = "Failed to save recording: \(error.localizedDescription)"
                 showError = true
                 isRecording = false // Make sure we stop recording even if save fails
-                Logger.audio.error("Failed to stop recording: \(error)")
+                Logger.audio.error("Failed to stop recording: [\(error.logCode, privacy: .public)] \(error)")
             }
         }
     }
@@ -172,7 +172,7 @@ class RecordingViewModel {
         errorMessage = "Recording failed: \(error.localizedDescription)"
         showError = true
 
-        Logger.audio.error("Recording failed mid-write: \(error)")
+        Logger.audio.error("Recording failed mid-write: [\(error.logCode, privacy: .public)] \(error)")
     }
 
     func toggleRecording() {

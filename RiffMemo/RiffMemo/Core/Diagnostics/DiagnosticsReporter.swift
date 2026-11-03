@@ -39,7 +39,7 @@ nonisolated final class DiagnosticsReporter: NSObject, MXMetricManagerSubscriber
             do {
                 try store.save(payload.jsonRepresentation())
             } catch {
-                Logger.app.error("Failed to save diagnostic report: \(error)")
+                Logger.app.error("Failed to save diagnostic report: [\(error.logCode, privacy: .public)] \(error)")
             }
         }
     }

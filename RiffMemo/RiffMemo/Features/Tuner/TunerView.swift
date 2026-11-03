@@ -129,7 +129,7 @@ struct TunerView: View {
                     try await pitchDetector.startDetection()
                     HapticManager.shared.mediumTap()
                 } catch {
-                    Logger.audio.error("Failed to start tuner: \(error)")
+                    Logger.audio.error("Failed to start tuner: [\(error.logCode, privacy: .public)] \(error)")
                 }
             }
         }

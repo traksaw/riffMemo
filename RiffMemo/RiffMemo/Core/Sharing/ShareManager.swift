@@ -53,7 +53,7 @@ class ShareManager {
             Logger.app.info("Shared recording: \(recording.title)")
 
         } catch {
-            Logger.app.error("Failed to share recording: \(error)")
+            Logger.app.error("Failed to share recording: [\(error.logCode, privacy: .public)] \(error)")
         }
     }
 
@@ -95,7 +95,7 @@ class ShareManager {
             Logger.app.info("Shared \(recordings.count) recordings as zip")
 
         } catch {
-            Logger.app.error("Failed to share multiple recordings: \(error)")
+            Logger.app.error("Failed to share multiple recordings: [\(error.logCode, privacy: .public)] \(error)")
         }
     }
 
@@ -179,7 +179,7 @@ class ShareManager {
 
                 Logger.app.info("Created zip archive: \(newURL.lastPathComponent)")
             } catch {
-                Logger.app.error("Zip creation error: \(error)")
+                Logger.app.error("Zip creation error: [\(error.logCode, privacy: .public)] \(error)")
             }
         }
 

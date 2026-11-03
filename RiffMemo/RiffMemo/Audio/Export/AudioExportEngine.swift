@@ -124,14 +124,14 @@ actor AudioExportEngine {
                         Logger.audio.info("Export complete: \(destinationURL.lastPathComponent)")
                         continuation.resume(returning: destinationURL)
                     } else if let error = writer.error {
-                        Logger.audio.error("Writer failed: \(error)")
+                        Logger.audio.error("Writer failed: [\(error.logCode, privacy: .public)] \(error)")
                         continuation.resume(throwing: ExportError.exportFailed(error))
                     } else {
                         continuation.resume(throwing: ExportError.exportIncomplete)
                     }
 
                 } catch {
-                    Logger.audio.error("Audio conversion failed: \(error)")
+                    Logger.audio.error("Audio conversion failed: [\(error.logCode, privacy: .public)] \(error)")
                     continuation.resume(throwing: ExportError.exportFailed(error))
                 }
             }
@@ -197,7 +197,7 @@ actor AudioExportEngine {
                 onProgress?(progress)
 
             } catch {
-                Logger.audio.error("Failed to export \(recording.title): \(error)")
+                Logger.audio.error("Failed to export \(recording.title): [\(error.logCode, privacy: .public)] \(error)")
                 throw error
             }
         }

@@ -86,7 +86,7 @@ class AudioAnalysisManager {
                 Logger.audio.info("Quality: \(results.quality?.quality.rawValue ?? "Unknown", privacy: .public)")
             }
         } catch {
-            Logger.audio.error("Audio decode failed: \(error)")
+            Logger.audio.error("Audio decode failed: [\(error.logCode, privacy: .public)] \(error)")
         }
 
         analysisProgress = 1.0

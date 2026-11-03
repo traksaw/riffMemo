@@ -48,7 +48,7 @@ actor AudioPlaybackManager {
 
             Logger.audio.info("Started playback for: \(recording.title)")
         } catch let error as NSError {
-            Logger.audio.error("Failed to create audio player: \(error.localizedDescription) (Code: \(error.code))")
+            Logger.audio.error("Failed to create audio player: [\(error.logCode, privacy: .public)] \(error)")
             throw error
         }
     }

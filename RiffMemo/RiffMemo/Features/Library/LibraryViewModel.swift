@@ -63,7 +63,7 @@ class LibraryViewModel {
             recordings = try await repository.fetchAll()
             Logger.data.info("Loaded \(self.recordings.count) recordings")
         } catch {
-            Logger.data.error("Failed to load recordings: \(error)")
+            Logger.data.error("Failed to load recordings: [\(error.logCode, privacy: .public)] \(error)")
         }
     }
 
@@ -75,7 +75,7 @@ class LibraryViewModel {
             await loadRecordings()
             Logger.data.info("Deleted recording: \(recording.title)")
         } catch {
-            Logger.data.error("Failed to delete recording: \(error)")
+            Logger.data.error("Failed to delete recording: [\(error.logCode, privacy: .public)] \(error)")
         }
     }
 
@@ -104,7 +104,7 @@ class LibraryViewModel {
             do {
                 try await repository.delete(recording)
             } catch {
-                Logger.data.error("Failed to delete recording \(recording.title): \(error)")
+                Logger.data.error("Failed to delete recording \(recording.title): [\(error.logCode, privacy: .public)] \(error)")
             }
         }
         await loadRecordings()
@@ -120,7 +120,7 @@ class LibraryViewModel {
             try await repository.update(recording)
             Logger.data.info("Renamed recording to: \(newTitle)")
         } catch {
-            Logger.data.error("Failed to rename recording: \(error)")
+            Logger.data.error("Failed to rename recording: [\(error.logCode, privacy: .public)] \(error)")
         }
     }
 
@@ -162,7 +162,7 @@ class LibraryViewModel {
                 Logger.audio.info("Generated waveform \(index + 1)/\(recordingsNeedingWaveforms.count)")
 
             } catch {
-                Logger.audio.error("Failed to generate waveform for \(recording.title): \(error)")
+                Logger.audio.error("Failed to generate waveform for \(recording.title): [\(error.logCode, privacy: .public)] \(error)")
             }
 
             // Small delay to keep UI responsive
@@ -193,7 +193,7 @@ class LibraryViewModel {
                 )
                 recording.waveformData = waveformData
             } catch {
-                Logger.audio.error("Failed to preload waveform: \(error)")
+                Logger.audio.error("Failed to preload waveform: [\(error.logCode, privacy: .public)] \(error)")
             }
         }
     }

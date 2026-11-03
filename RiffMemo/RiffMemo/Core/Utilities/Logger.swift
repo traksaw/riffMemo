@@ -28,3 +28,18 @@ extension Logger {
     nonisolated static let data = Logger(subsystem: subsystem, category: "Data")
     nonisolated static let ui = Logger(subsystem: subsystem, category: "UI")
 }
+
+extension Error {
+    /// The error's domain and code, such as `AVFoundationErrorDomain -11800`.
+    ///
+    /// Safe to log as `.public`: the domain is a fixed string and the code is a number, so
+    /// neither can hold a title or a path. The full error (its message can embed `NSFilePath`)
+    /// stays private. Log both:
+    ///
+    ///     Logger.audio.error("Failed: [\(error.logCode, privacy: .public)] \(error)")
+    ///     // Device Console: "Failed: [AVFoundationErrorDomain -11800] <private>"
+    nonisolated var logCode: String {
+        let nsError = self as NSError
+        return "\(nsError.domain) \(nsError.code)"
+    }
+}

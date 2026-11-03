@@ -177,7 +177,7 @@ struct SettingsView: View {
             diagnosticsCount = try store.reportURLs().count
             diagnosticsExportURL = try store.makeExportFile()
         } catch {
-            Logger.app.error("Failed to read diagnostic reports: \(error)")
+            Logger.app.error("Failed to read diagnostic reports: [\(error.logCode, privacy: .public)] \(error)")
             diagnosticsCount = 0
             diagnosticsExportURL = nil
         }
