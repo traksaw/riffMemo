@@ -8,6 +8,7 @@
 import Foundation
 import AVFoundation
 import Accelerate
+import OSLog
 
 /// Analyzes audio quality metrics (peak level, RMS, dynamic range, etc.)
 actor AudioQualityAnalyzer {
@@ -18,12 +19,12 @@ actor AudioQualityAnalyzer {
     /// - Parameter url: URL of the audio file
     /// - Returns: Audio quality metrics
     func analyze(from url: URL) async throws -> AudioQualityMetrics {
-        Logger.info("Analyzing audio quality from \(url.lastPathComponent)", category: Logger.audio)
+        Logger.audio.info("Analyzing audio quality from \(url.lastPathComponent)")
 
         let loaded = try AudioSampleLoader.load(from: url)
         let metrics = analyze(samples: loaded.samples, sampleRate: loaded.sampleRate)
 
-        Logger.info("Quality analysis complete: \(metrics.quality)", category: Logger.audio)
+        Logger.audio.info("Quality analysis complete: \(metrics.quality.rawValue, privacy: .public)")
 
         return metrics
     }

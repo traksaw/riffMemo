@@ -6,6 +6,7 @@
 
 import SwiftUI
 import SwiftData
+import OSLog
 
 struct RecordingView: View {
     @State private var viewModel: RecordingViewModel
@@ -244,7 +245,7 @@ struct RecordingView: View {
             // Start recording
             if metronomeEnabled {
                 if metronome.visualOnlyMode {
-                    Logger.info("Auto-disabling visual-only mode for recording click track", category: Logger.audio)
+                    Logger.audio.info("Auto-disabling visual-only mode for recording click track")
                     metronome.setVisualOnlyMode(false)
                 }
 

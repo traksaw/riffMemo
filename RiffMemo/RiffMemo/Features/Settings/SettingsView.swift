@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import OSLog
 
 struct SettingsView: View {
     @AppStorage("autoAnalyzeRecordings") private var autoAnalyze = true
@@ -176,7 +177,7 @@ struct SettingsView: View {
             diagnosticsCount = try store.reportURLs().count
             diagnosticsExportURL = try store.makeExportFile()
         } catch {
-            Logger.error("Failed to read diagnostic reports: \(error)", category: Logger.app)
+            Logger.app.error("Failed to read diagnostic reports: \(error)")
             diagnosticsCount = 0
             diagnosticsExportURL = nil
         }

@@ -7,6 +7,7 @@
 
 import Foundation
 import AVFoundation
+import OSLog
 
 /// Manages audio recording using AVAudioEngine
 actor AudioRecordingManager {
@@ -58,7 +59,7 @@ actor AudioRecordingManager {
         try setupAudioEngine(session: recordingSession)
 
         isRecording = true
-        Logger.info("Audio recording started", category: Logger.audio)
+        Logger.audio.info("Audio recording started")
     }
 
     func stopRecording(duration: TimeInterval, recordedWithBPM: Int? = nil, recordedWithTimeSignature: String? = nil) async throws -> Recording {
@@ -113,7 +114,7 @@ actor AudioRecordingManager {
             recordedWithTimeSignature: recordedWithTimeSignature
         )
 
-        Logger.info("Audio recording stopped - Duration: \(finalDuration)s, File size: \(fileSize) bytes", category: Logger.audio)
+        Logger.audio.info("Audio recording stopped - Duration: \(finalDuration)s, File size: \(fileSize) bytes")
 
         clearEngineState()
 
@@ -214,7 +215,7 @@ actor AudioRecordingManager {
         guard failureError == nil else { return }
         failureError = error
 
-        Logger.error("Audio write failed, stopping recording: \(error)", category: Logger.audio)
+        Logger.audio.error("Audio write failed, stopping recording: \(error)")
 
         // If stopRecording() already claimed the stop (isRecording is already false), it will
         // pick up `failureError` itself after its flush sleep and clear state there — don't

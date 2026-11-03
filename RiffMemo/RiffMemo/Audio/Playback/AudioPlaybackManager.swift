@@ -7,6 +7,7 @@
 
 import Foundation
 import AVFoundation
+import OSLog
 
 /// Manages audio playback using AVAudioPlayer
 actor AudioPlaybackManager {
@@ -27,7 +28,7 @@ actor AudioPlaybackManager {
 
         // Verify the file exists before attempting to play
         guard FileManager.default.fileExists(atPath: recording.audioFileURL.path) else {
-            Logger.error("Audio file not found at path: \(recording.audioFileURL.path)", category: Logger.audio)
+            Logger.audio.error("Audio file not found at path: \(recording.audioFileURL.path)")
             throw PlaybackError.fileNotFound
         }
 
@@ -38,35 +39,35 @@ actor AudioPlaybackManager {
 
             // Verify the player is ready
             guard player.play() else {
-                Logger.error("Failed to start playback for: \(recording.title)", category: Logger.audio)
+                Logger.audio.error("Failed to start playback for: \(recording.title)")
                 throw PlaybackError.playbackFailed
             }
 
             audioPlayer = player
             currentRecording = recording
 
-            Logger.info("Started playback for: \(recording.title)", category: Logger.audio)
+            Logger.audio.info("Started playback for: \(recording.title)")
         } catch let error as NSError {
-            Logger.error("Failed to create audio player: \(error.localizedDescription) (Code: \(error.code))", category: Logger.audio)
+            Logger.audio.error("Failed to create audio player: \(error.localizedDescription) (Code: \(error.code))")
             throw error
         }
     }
 
     func pause() async {
         audioPlayer?.pause()
-        Logger.info("Paused playback", category: Logger.audio)
+        Logger.audio.info("Paused playback")
     }
 
     func resume() async {
         audioPlayer?.play()
-        Logger.info("Resumed playback", category: Logger.audio)
+        Logger.audio.info("Resumed playback")
     }
 
     func stop() async {
         audioPlayer?.stop()
         audioPlayer = nil
         currentRecording = nil
-        Logger.info("Stopped playback", category: Logger.audio)
+        Logger.audio.info("Stopped playback")
     }
 
     func isPlaying() async -> Bool {

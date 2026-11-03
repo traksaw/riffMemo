@@ -9,6 +9,7 @@ import Foundation
 import Observation
 import AVFoundation
 import Combine
+import OSLog
 
 /// ViewModel for the recording screen
 @MainActor
@@ -101,11 +102,11 @@ class RecordingViewModel {
                 samplesSinceLastUpdate = 0  // Reset throttle counter
                 recordingStartTime = Date()
                 startDurationTimer()
-                Logger.info("Recording started", category: Logger.audio)
+                Logger.audio.info("Recording started")
             } catch {
                 errorMessage = "Failed to start recording: \(error.localizedDescription)"
                 showError = true
-                Logger.error("Failed to start recording: \(error)", category: Logger.audio)
+                Logger.audio.error("Failed to start recording: \(error)")
             }
         }
     }
@@ -125,7 +126,7 @@ class RecordingViewModel {
                 )
 
                 try await repository.save(recording)
-                Logger.info("Recording stopped and saved with duration: \(duration)s", category: Logger.audio)
+                Logger.audio.info("Recording stopped and saved with duration: \(duration)s")
 
                 // Only flip to "stopped" once the recording is durably persisted — a caller
                 // reacting to isRecording==false (e.g. immediately switching to the Library tab,
@@ -141,7 +142,7 @@ class RecordingViewModel {
 
                 // Queue automatic analysis
                 AudioAnalysisManager.shared.queueAnalysis(recording)
-                Logger.info("Queued automatic analysis for: \(recording.title)", category: Logger.audio)
+                Logger.audio.info("Queued automatic analysis for: \(recording.title)")
 
             } catch AudioError.writeFailed {
                 // Already surfaced via the onRecordingFailed callback → handleRecordingFailure(_:),
@@ -149,12 +150,12 @@ class RecordingViewModel {
                 // failure. Don't clobber that more specific message with a generic one here —
                 // just make sure recording state is cleared.
                 isRecording = false
-                Logger.error("Stop reported a write failure already surfaced via onRecordingFailed", category: Logger.audio)
+                Logger.audio.error("Stop reported a write failure already surfaced via onRecordingFailed")
             } catch {
                 errorMessage = "Failed to save recording: \(error.localizedDescription)"
                 showError = true
                 isRecording = false // Make sure we stop recording even if save fails
-                Logger.error("Failed to stop recording: \(error)", category: Logger.audio)
+                Logger.audio.error("Failed to stop recording: \(error)")
             }
         }
     }
@@ -171,7 +172,7 @@ class RecordingViewModel {
         errorMessage = "Recording failed: \(error.localizedDescription)"
         showError = true
 
-        Logger.error("Recording failed mid-write: \(error)", category: Logger.audio)
+        Logger.audio.error("Recording failed mid-write: \(error)")
     }
 
     func toggleRecording() {
@@ -251,7 +252,7 @@ class RecordingViewModel {
         case .began:
             // Interruption began (phone call, alarm, Siri, etc.)
             if isRecording {
-                Logger.info("Audio interruption began - stopping recording", category: Logger.audio)
+                Logger.audio.info("Audio interruption began - stopping recording")
                 stopRecording()
             }
 
@@ -262,11 +263,11 @@ class RecordingViewModel {
             }
             let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
             if options.contains(.shouldResume) {
-                Logger.info("Audio interruption ended - ready to record again", category: Logger.audio)
+                Logger.audio.info("Audio interruption ended - ready to record again")
             }
 
         @unknown default:
-            Logger.info("Unknown interruption type", category: Logger.audio)
+            Logger.audio.info("Unknown interruption type")
         }
     }
 
@@ -281,12 +282,12 @@ class RecordingViewModel {
         case .oldDeviceUnavailable:
             // Headphones unplugged, Bluetooth disconnected during recording
             if isRecording {
-                Logger.info("Audio device disconnected - stopping recording", category: Logger.audio)
+                Logger.audio.info("Audio device disconnected - stopping recording")
                 stopRecording()
             }
 
         case .newDeviceAvailable:
-            Logger.info("New audio device connected", category: Logger.audio)
+            Logger.audio.info("New audio device connected")
 
         case .routeConfigurationChange, .categoryChange, .override, .wakeFromSleep, .noSuitableRouteForCategory, .unknown:
             break

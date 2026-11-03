@@ -7,6 +7,7 @@
 
 import Foundation
 import Observation
+import OSLog
 
 /// ViewModel for the library screen
 @MainActor
@@ -60,9 +61,9 @@ class LibraryViewModel {
     func loadRecordings() async {
         do {
             recordings = try await repository.fetchAll()
-            Logger.info("Loaded \(recordings.count) recordings", category: Logger.data)
+            Logger.data.info("Loaded \(self.recordings.count) recordings")
         } catch {
-            Logger.error("Failed to load recordings: \(error)", category: Logger.data)
+            Logger.data.error("Failed to load recordings: \(error)")
         }
     }
 
@@ -72,18 +73,18 @@ class LibraryViewModel {
         do {
             try await repository.delete(recording)
             await loadRecordings()
-            Logger.info("Deleted recording: \(recording.title)", category: Logger.data)
+            Logger.data.info("Deleted recording: \(recording.title)")
         } catch {
-            Logger.error("Failed to delete recording: \(error)", category: Logger.data)
+            Logger.data.error("Failed to delete recording: \(error)")
         }
     }
 
     func deleteAllRecordings() async {
         guard !recordings.isEmpty else { return }
 
-        Logger.info("Deleting all \(recordings.count) recordings", category: Logger.data)
+        Logger.data.info("Deleting all \(self.recordings.count) recordings")
         await deleteRecordings(recordings)
-        Logger.info("Deleted all recordings", category: Logger.data)
+        Logger.data.info("Deleted all recordings")
     }
 
     /// Deletes the recordings whose id is in `ids`. Used by the Library's
@@ -93,9 +94,9 @@ class LibraryViewModel {
         let recordingsToDelete = recordings.filter { ids.contains($0.id) }
         guard !recordingsToDelete.isEmpty else { return }
 
-        Logger.info("Deleting \(recordingsToDelete.count) selected recordings", category: Logger.data)
+        Logger.data.info("Deleting \(recordingsToDelete.count) selected recordings")
         await deleteRecordings(recordingsToDelete)
-        Logger.info("Deleted selected recordings", category: Logger.data)
+        Logger.data.info("Deleted selected recordings")
     }
 
     private func deleteRecordings(_ recordingsToDelete: [Recording]) async {
@@ -103,7 +104,7 @@ class LibraryViewModel {
             do {
                 try await repository.delete(recording)
             } catch {
-                Logger.error("Failed to delete recording \(recording.title): \(error)", category: Logger.data)
+                Logger.data.error("Failed to delete recording \(recording.title): \(error)")
             }
         }
         await loadRecordings()
@@ -117,15 +118,15 @@ class LibraryViewModel {
         recording.title = newTitle
         do {
             try await repository.update(recording)
-            Logger.info("Renamed recording to: \(newTitle)", category: Logger.data)
+            Logger.data.info("Renamed recording to: \(newTitle)")
         } catch {
-            Logger.error("Failed to rename recording: \(error)", category: Logger.data)
+            Logger.data.error("Failed to rename recording: \(error)")
         }
     }
 
     func toggleFavorite(_ recording: Recording) async {
         recording.isFavorite.toggle()
-        Logger.info("Toggled favorite for: \(recording.title)", category: Logger.data)
+        Logger.data.info("Toggled favorite for: \(recording.title)")
     }
 
     // MARK: - Batch Waveform Generation
@@ -136,14 +137,14 @@ class LibraryViewModel {
         let recordingsNeedingWaveforms = recordings.filter { $0.waveformData == nil }
 
         guard !recordingsNeedingWaveforms.isEmpty else {
-            Logger.info("All recordings already have waveforms", category: Logger.audio)
+            Logger.audio.info("All recordings already have waveforms")
             return
         }
 
         isGeneratingWaveforms = true
         waveformProgress = 0
 
-        Logger.info("Generating waveforms for \(recordingsNeedingWaveforms.count) recordings", category: Logger.audio)
+        Logger.audio.info("Generating waveforms for \(recordingsNeedingWaveforms.count) recordings")
 
         for (index, recording) in recordingsNeedingWaveforms.enumerated() {
             do {
@@ -158,10 +159,10 @@ class LibraryViewModel {
                 // Update progress
                 waveformProgress = Double(index + 1) / Double(recordingsNeedingWaveforms.count)
 
-                Logger.info("Generated waveform \(index + 1)/\(recordingsNeedingWaveforms.count)", category: Logger.audio)
+                Logger.audio.info("Generated waveform \(index + 1)/\(recordingsNeedingWaveforms.count)")
 
             } catch {
-                Logger.error("Failed to generate waveform for \(recording.title): \(error)", category: Logger.audio)
+                Logger.audio.error("Failed to generate waveform for \(recording.title): \(error)")
             }
 
             // Small delay to keep UI responsive
@@ -171,7 +172,7 @@ class LibraryViewModel {
         isGeneratingWaveforms = false
         waveformProgress = 0
 
-        Logger.info("Batch waveform generation complete", category: Logger.audio)
+        Logger.audio.info("Batch waveform generation complete")
     }
 
     /// Pre-generates waveforms for the first N recordings for instant display
@@ -182,7 +183,7 @@ class LibraryViewModel {
 
         guard !recordingsToPreload.isEmpty else { return }
 
-        Logger.info("Preloading waveforms for \(recordingsToPreload.count) recordings", category: Logger.audio)
+        Logger.audio.info("Preloading waveforms for \(recordingsToPreload.count) recordings")
 
         for recording in recordingsToPreload {
             do {
@@ -192,7 +193,7 @@ class LibraryViewModel {
                 )
                 recording.waveformData = waveformData
             } catch {
-                Logger.error("Failed to preload waveform: \(error)", category: Logger.audio)
+                Logger.audio.error("Failed to preload waveform: \(error)")
             }
         }
     }
@@ -204,11 +205,11 @@ class LibraryViewModel {
         let unanalyzed = recordings.filter { $0.lastAnalyzedDate == nil }
 
         guard !unanalyzed.isEmpty else {
-            Logger.info("All recordings already analyzed", category: Logger.audio)
+            Logger.audio.info("All recordings already analyzed")
             return
         }
 
-        Logger.info("Queuing \(unanalyzed.count) recordings for analysis", category: Logger.audio)
+        Logger.audio.info("Queuing \(unanalyzed.count) recordings for analysis")
         AudioAnalysisManager.shared.queueBatchAnalysis(unanalyzed)
     }
 

@@ -7,6 +7,7 @@
 
 import Foundation
 import Observation
+import OSLog
 
 /// Coordinates all audio analysis operations with background queue processing
 @MainActor
@@ -53,7 +54,7 @@ class AudioAnalysisManager {
         _ recording: Recording,
         options: AnalysisOptions = .all
     ) async -> AnalysisResults {
-        Logger.info("Starting analysis for: \(recording.title)", category: Logger.audio)
+        Logger.audio.info("Starting analysis for: \(recording.title)")
 
         isAnalyzing = true
         currentlyAnalyzing = recording.title
@@ -68,24 +69,24 @@ class AudioAnalysisManager {
             if options.contains(.bpm) {
                 analysisProgress = 0.1
                 results.bpm = await bpmDetector.detectBPM(samples: loaded.samples, sampleRate: loaded.sampleRate)
-                Logger.info("BPM detected: \(results.bpm ?? 0)", category: Logger.audio)
+                Logger.audio.info("BPM detected: \(results.bpm ?? 0)")
             }
 
             // Key Detection
             if options.contains(.key) {
                 analysisProgress = 0.4
                 results.key = await keyDetector.detectKey(samples: loaded.samples, sampleRate: loaded.sampleRate)
-                Logger.info("Key detected: \(results.key ?? "Unknown")", category: Logger.audio)
+                Logger.audio.info("Key detected: \(results.key ?? "Unknown", privacy: .public)")
             }
 
             // Quality Analysis
             if options.contains(.quality) {
                 analysisProgress = 0.7
                 results.quality = await qualityAnalyzer.analyze(samples: loaded.samples, sampleRate: loaded.sampleRate)
-                Logger.info("Quality: \(results.quality?.quality.rawValue ?? "Unknown")", category: Logger.audio)
+                Logger.audio.info("Quality: \(results.quality?.quality.rawValue ?? "Unknown", privacy: .public)")
             }
         } catch {
-            Logger.error("Audio decode failed: \(error)", category: Logger.audio)
+            Logger.audio.error("Audio decode failed: \(error)")
         }
 
         analysisProgress = 1.0
@@ -112,7 +113,7 @@ class AudioAnalysisManager {
         currentlyAnalyzing = nil
         analysisProgress = 0
 
-        Logger.info("Analysis complete for: \(recording.title)", category: Logger.audio)
+        Logger.audio.info("Analysis complete for: \(recording.title)")
 
         return results
     }
@@ -124,7 +125,7 @@ class AudioAnalysisManager {
         guard isAnalyzable(recording) else { return }
 
         analysisQueue.append(recording)
-        Logger.info("Queued analysis for: \(recording.title)", category: Logger.audio)
+        Logger.audio.info("Queued analysis for: \(recording.title)")
 
         if !isProcessingQueue {
             Task {
@@ -138,7 +139,7 @@ class AudioAnalysisManager {
         let analyzable = recordings.filter(isAnalyzable)
 
         analysisQueue.append(contentsOf: analyzable)
-        Logger.info("Queued \(analyzable.count) recordings for analysis", category: Logger.audio)
+        Logger.audio.info("Queued \(analyzable.count) recordings for analysis")
 
         if !isProcessingQueue {
             Task {
@@ -150,7 +151,7 @@ class AudioAnalysisManager {
     /// Returns whether a recording is long enough to attempt BPM/key analysis.
     private func isAnalyzable(_ recording: Recording) -> Bool {
         guard recording.duration >= Self.minimumAnalyzableDuration else {
-            Logger.info("Skipping analysis for \(recording.title): duration \(recording.duration)s below minimum \(Self.minimumAnalyzableDuration)s", category: Logger.audio)
+            Logger.audio.info("Skipping analysis for \(recording.title): duration \(recording.duration)s below minimum \(Self.minimumAnalyzableDuration)s")
             return false
         }
         return true
@@ -167,7 +168,7 @@ class AudioAnalysisManager {
 
             // Check if already analyzed
             if recording.lastAnalyzedDate != nil {
-                Logger.info("Skipping already analyzed: \(recording.title)", category: Logger.audio)
+                Logger.audio.info("Skipping already analyzed: \(recording.title)")
                 continue
             }
 
@@ -178,13 +179,13 @@ class AudioAnalysisManager {
         }
 
         isProcessingQueue = false
-        Logger.info("Analysis queue complete", category: Logger.audio)
+        Logger.audio.info("Analysis queue complete")
     }
 
     /// Clears the analysis queue
     func clearQueue() {
         analysisQueue.removeAll()
-        Logger.info("Analysis queue cleared", category: Logger.audio)
+        Logger.audio.info("Analysis queue cleared")
     }
 
     /// Returns the number of recordings waiting in the queue

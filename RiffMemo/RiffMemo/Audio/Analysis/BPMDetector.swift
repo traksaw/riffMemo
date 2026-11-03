@@ -8,6 +8,7 @@
 import Foundation
 import AVFoundation
 import Accelerate
+import OSLog
 
 /// Detects tempo (BPM) using autocorrelation and onset detection
 actor BPMDetector {
@@ -25,12 +26,12 @@ actor BPMDetector {
     /// - Parameter url: URL of the audio file
     /// - Returns: Detected BPM value, or nil if detection failed
     func detectBPM(from url: URL) async throws -> Int? {
-        Logger.info("Detecting BPM from \(url.lastPathComponent)", category: Logger.audio)
+        Logger.audio.info("Detecting BPM from \(url.lastPathComponent)")
 
         let loaded = try AudioSampleLoader.load(from: url)
         let bpm = detectBPM(samples: loaded.samples, sampleRate: loaded.sampleRate)
 
-        Logger.info("Detected BPM: \(bpm ?? 0)", category: Logger.audio)
+        Logger.audio.info("Detected BPM: \(bpm ?? 0)")
 
         return bpm
     }

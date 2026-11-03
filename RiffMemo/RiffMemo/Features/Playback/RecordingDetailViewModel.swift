@@ -9,6 +9,7 @@ import Foundation
 import Observation
 import AVFoundation
 import Combine
+import OSLog
 
 /// ViewModel for the recording detail screen with playback controls
 @MainActor
@@ -63,12 +64,12 @@ class RecordingDetailViewModel {
                 }
                 isPlaying = true
                 startPlaybackTimer()
-                Logger.info("Playback started", category: Logger.audio)
+                Logger.audio.info("Playback started")
             } catch {
                 errorMessage = "Failed to play recording: \(error.localizedDescription)"
                 showError = true
                 isPlaying = false
-                Logger.error("Failed to play recording: \(error)", category: Logger.audio)
+                Logger.audio.error("Failed to play recording: \(error)")
             }
         }
     }
@@ -78,7 +79,7 @@ class RecordingDetailViewModel {
             await audioPlayer.pause()
             isPlaying = false
             stopPlaybackTimer()
-            Logger.info("Playback paused", category: Logger.audio)
+            Logger.audio.info("Playback paused")
         }
     }
 
@@ -88,7 +89,7 @@ class RecordingDetailViewModel {
             isPlaying = false
             currentTime = 0
             stopPlaybackTimer()
-            Logger.info("Playback stopped", category: Logger.audio)
+            Logger.audio.info("Playback stopped")
         }
     }
 
@@ -153,7 +154,7 @@ class RecordingDetailViewModel {
         case .began:
             // Interruption began - pause playback
             if isPlaying {
-                Logger.info("Audio interruption began - pausing playback", category: Logger.audio)
+                Logger.audio.info("Audio interruption began - pausing playback")
                 pause()
             }
 
@@ -164,12 +165,12 @@ class RecordingDetailViewModel {
             }
             let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
             if options.contains(.shouldResume) {
-                Logger.info("Audio interruption ended - ready to resume playback", category: Logger.audio)
+                Logger.audio.info("Audio interruption ended - ready to resume playback")
                 // Optionally auto-resume: play()
             }
 
         @unknown default:
-            Logger.info("Unknown interruption type", category: Logger.audio)
+            Logger.audio.info("Unknown interruption type")
         }
     }
 
@@ -184,12 +185,12 @@ class RecordingDetailViewModel {
         case .oldDeviceUnavailable:
             // Headphones unplugged - pause playback
             if isPlaying {
-                Logger.info("Audio device disconnected - pausing playback", category: Logger.audio)
+                Logger.audio.info("Audio device disconnected - pausing playback")
                 pause()
             }
 
         case .newDeviceAvailable:
-            Logger.info("New audio device connected", category: Logger.audio)
+            Logger.audio.info("New audio device connected")
 
         case .routeConfigurationChange, .categoryChange, .override, .wakeFromSleep, .noSuitableRouteForCategory, .unknown:
             break
