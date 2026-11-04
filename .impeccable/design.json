@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-04T05:45:00-05:00",
+  "title": "Design System: RiffMemo",
+  "extensions": {
+    "colorMeta": {
+      "ground": { "role": "neutral", "displayName": "Ground" },
+      "surface": { "role": "neutral", "displayName": "Surface" },
+      "raised": { "role": "neutral", "displayName": "Raised" },
+      "text": { "role": "neutral", "displayName": "Text" },
+      "text-secondary": { "role": "neutral", "displayName": "Secondary text" },
+      "text-tertiary": { "role": "neutral", "displayName": "Tertiary" },
+      "recording": { "role": "primary", "displayName": "Take Red" },
+      "in-tune": { "role": "secondary", "displayName": "Needle Green" },
+      "warning": { "role": "secondary", "displayName": "Stage Amber" }
+    },
+    "keyColors": {
+      "order": ["C", "G", "D", "A", "E", "B", "F#", "Db", "Ab", "Eb", "Bb", "F"],
+      "hue": "(48 - 30 * i) mod 360",
+      "dotMajor": "hsl(h 70% 62%)",
+      "dotMinor": "hsl(h 55% 52%), h = relative major's hue",
+      "tintMajor": "hsl(h 65% 70%)",
+      "tintMinor": "hsl(h 50% 64%)",
+      "noKey": "#6E6E78"
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "spring-default", "value": "spring(response: 0.3, dampingFraction: 1.0)", "purpose": "Default for anything touched. Bounce only after a flick." },
+      { "name": "ease-strong-out", "value": ".timingCurve(0.23, 1, 0.32, 1)", "purpose": "Fixed-duration ease-outs (press, chip fill, toasts, new layer)." },
+      { "name": "press", "value": "scale 0.92, 120 ms ease-out", "purpose": "Record button touch-down." },
+      { "name": "reduce-motion-fade", "value": "opacity, 200 ms", "purpose": "Replaces every zoom, slide and scale under Reduce Motion." }
+    ]
+  },
+  "components": [],
+  "narrative": {
+    "northStar": "The Quiet Instrument",
+    "keyCharacteristics": [
+      "Tonal layering on a near-black ground. No shadows.",
+      "Monospaced, tabular numbers for every value that changes: time, BPM, Hz, cents, durations.",
+      "Semantic color only: recording, in tune, warning, and the key hue.",
+      "One primary action per screen. The record button is the visual centre of gravity.",
+      "Pill shapes for every control. Rounded rectangles for groups.",
+      "Dark only in 1.0. Light mode is a v1.1 feature."
+    ],
+    "rules": [
+      { "name": "The Color Means Something Rule", "section": "colors" },
+      { "name": "The Never Alone Rule", "section": "colors" },
+      { "name": "The One Red Rule", "section": "colors" },
+      { "name": "The Tabular Numbers Rule", "section": "typography" },
+      { "name": "The Thin Only When Big Rule", "section": "typography" },
+      { "name": "The Text Style Rule", "section": "typography" },
+      { "name": "The No-Shadow Rule", "section": "elevation" },
+      { "name": "The Solid Fallback Rule", "section": "elevation" }
+    ]
+  }
+}
