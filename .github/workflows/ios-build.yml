@@ -44,16 +44,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Matrixes device model/size class rather than iOS runtime version:
-        # this runner image only ships one fully-installed simulator runtime
-        # (paired with the default Xcode, 16.4 -> iOS 18.5). The older
-        # side-by-side Xcode installs (16.0, 16.2, ...) exist for build-time
-        # SDK compatibility only — their bundled simulator runtimes aren't
-        # actually on disk, and `xcodebuild -runFirstLaunch` doesn't install
-        # them (confirmed by a failed CI run, not assumed). Getting real
-        # multi-iOS-version coverage would need either lowering the iOS 18.0
-        # deployment target or an on-demand runtime download in CI, which
-        # trades reliability for coverage this project doesn't need yet.
+        # Matrixes device model/size class rather than iOS runtime version.
+        # The runner image's simulator runtimes change when GitHub updates it
+        # (on 2026-11-03 it listed iOS 18.5, 18.6, 26.0, and 26.2). The test
+        # step names only the device, so xcodebuild picks the newest runtime
+        # that has it. Pinning an exact OS would break when the image drops
+        # that runtime. Getting deliberate multi-iOS-version coverage would
+        # need a matrix axis for OS plus a check that each runtime exists,
+        # which trades reliability for coverage this project doesn't need yet.
         # Device/size-class spread still catches real layout regressions
         # (compact vs. regular width, smallest vs. largest screen).
         device:
@@ -83,6 +81,8 @@ jobs:
 
     # `-destination 'generic/platform=iOS Simulator'` only works for building;
     # the `test` action needs a concrete simulator to actually run tests on.
+    # Each leg tests on its own `matrix.device`. A hardcoded name here once made
+    # all three legs test on iPhone 16 (WAS-115).
     #
     # This step is the project's safety net: it must be allowed to fail the
     # job. Do NOT append `|| true` (or otherwise swallow a non-zero exit)
@@ -108,11 +108,36 @@ jobs:
         xcodebuild test \
           -project RiffMemo.xcodeproj \
           -scheme RiffMemo \
-          -destination 'platform=iOS Simulator,name=iPhone 16' \
+          -destination 'platform=iOS Simulator,name=${{ matrix.device }}' \
+          -resultBundlePath "$RUNNER_TEMP/TestResults.xcresult" \
           -parallel-testing-enabled NO \
           -skip-testing:RiffMemoUITests/RiffMemoUITests/testLaunchPerformance \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO
+
+    # A green leg must prove it tested on its own device. WAS-115 found all
+    # three legs testing on iPhone 16 while CI stayed green; this step reads
+    # the device from the result bundle, so that mistake now fails the leg.
+    # The device name goes through `env`, not straight into the script, so its
+    # spaces and parentheses never need shell quoting.
+    - name: Verify tests ran on ${{ matrix.device }}
+      env:
+        EXPECTED_DEVICE: ${{ matrix.device }}
+      run: |
+        xcrun xcresulttool get test-results summary \
+          --path "$RUNNER_TEMP/TestResults.xcresult" > "$RUNNER_TEMP/summary.json"
+        python3 - "$RUNNER_TEMP/summary.json" <<'PY'
+        import json, os, sys
+        expected = os.environ["EXPECTED_DEVICE"]
+        summary = json.load(open(sys.argv[1]))
+        actual = sorted({entry["device"]["deviceName"]
+                         for entry in summary.get("devicesAndConfigurations", [])})
+        print(f"Expected device: {expected}")
+        print(f"Tested on:       {', '.join(actual) or '(none)'}")
+        if actual != [expected]:
+            print(f"::error::Tests ran on {actual or 'no device'}, not on '{expected}'.")
+            sys.exit(1)
+        PY
 
   # Branch protection requires a status check by name, but the matrix job's
   # name embeds the device (`Build and Test (iPhone 16)`, etc.), so adding or
