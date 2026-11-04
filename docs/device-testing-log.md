@@ -29,6 +29,18 @@ TestFlight app (orange dot before the name) is installed now.
 
 ## Test entries
 
+### 2026-11-03 — WAS-113: TestFlight 1.0 (9) skips the compliance hold
+
+- Build: TestFlight 1.0 (9), from the WAS-113 branch (`main` plus the
+  `ExportComplianceTests`). First build uploaded with
+  `ITSAppUsesNonExemptEncryption = NO`, from PR #47.
+- Result: App Store Connect showed build 9 as **Ready to Submit** in the
+  Internal group, with no **Missing Compliance** and no **Manage** button.
+  Nobody answered the export question. Builds 4, 6, 7, and 8 had all stopped
+  there.
+- Guard: `ExportComplianceTests` fails CI if the key disappears, or if app
+  source starts calling encryption APIs, which would make `NO` untrue.
+
 ### 2026-11-03 — TestFlight 1.0 (8) installed after a compliance hold
 
 - Build: TestFlight 1.0 (8), from `main` at `6b2861a` (the WAS-165 merge).
