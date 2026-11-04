@@ -50,6 +50,8 @@ class SharedMetronomeService: ObservableObject {
     // MARK: - Audio Components
 
     private var audioEngine: AVAudioEngine?
+    // The audio session demand held while the click runs (WAS-117).
+    private var sessionToken: AudioSessionCoordinator.Token?
     private var playerNode: AVAudioPlayerNode?
     private var mixer: AVAudioMixerNode?
 
@@ -173,7 +175,7 @@ class SharedMetronomeService: ObservableObject {
         guard !isPlaying else { return }
 
         do {
-            try setupAudioSession()
+            try acquireAudioSession()
             try setupAudioEngine()
             generateClickSounds()
 
@@ -200,6 +202,8 @@ class SharedMetronomeService: ObservableObject {
             showError = true
             isPlaying = false
             state = .idle
+            audioEngine?.stop()
+            releaseAudioSession()
         }
     }
 
@@ -209,7 +213,7 @@ class SharedMetronomeService: ObservableObject {
         guard !isPlaying else { return }
 
         do {
-            try setupAudioSession()
+            try acquireAudioSession()
             try setupAudioEngine()
             generateClickSounds()
 
@@ -241,6 +245,8 @@ class SharedMetronomeService: ObservableObject {
             showError = true
             isPlaying = false
             state = .idle
+            audioEngine?.stop()
+            releaseAudioSession()
         }
     }
 
@@ -255,6 +261,7 @@ class SharedMetronomeService: ObservableObject {
 
         playerNode?.stop()
         audioEngine?.stop()
+        releaseAudioSession()
 
         isPlaying = false
         currentBeat = 0
@@ -448,15 +455,6 @@ class SharedMetronomeService: ObservableObject {
     }
 
     // MARK: - Private Methods
-
-    private func setupAudioSession() throws {
-        let session = AVAudioSession.sharedInstance()
-
-        // Use EXACT same configuration as AudioRecordingManager to prevent reconfiguration glitches
-        // Mode .measurement is optimized for low-latency recording
-        try session.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker])
-        try session.setActive(true)
-    }
 
     private func setupAudioEngine() throws {
         let engine = AVAudioEngine()
@@ -910,5 +908,26 @@ class SharedMetronomeService: ObservableObject {
         if subdivisionCounter == 0 {
             currentBeat = (currentBeat + 1) % timeSignature.beatsPerMeasure
         }
+    }
+}
+
+// MARK: - Audio session (WAS-117)
+
+extension SharedMetronomeService {
+
+    /// Asks the coordinator for a session that covers the click (WAS-117). The click uses
+    /// the same configuration as recording, so a take can start over a running click
+    /// without a category change that would glitch it.
+    private func acquireAudioSession() throws {
+        if sessionToken == nil {
+            sessionToken = try AudioSessionCoordinator.shared.acquire(.click)
+        }
+    }
+
+    /// Gives the session back so Music can resume.
+    private func releaseAudioSession() {
+        guard let sessionToken else { return }
+        AudioSessionCoordinator.shared.release(sessionToken)
+        self.sessionToken = nil
     }
 }
