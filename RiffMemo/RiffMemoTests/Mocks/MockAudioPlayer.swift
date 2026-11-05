@@ -21,6 +21,8 @@ final class MockAudioPlayer: AudioPlayerProtocol, @unchecked Sendable {
     /// If set, play(recording:) throws this instead of succeeding.
     var playError: Error?
     var currentTimeReturnValue: TimeInterval = 0
+    /// True between a successful play()/resume() and pause()/stop()/finishPlaying().
+    private(set) var isPlayingReturnValue = false
 
     func play(recording: Recording) async throws {
         playCallCount += 1
@@ -28,18 +30,33 @@ final class MockAudioPlayer: AudioPlayerProtocol, @unchecked Sendable {
         if let playError {
             throw playError
         }
+        isPlayingReturnValue = true
     }
 
     func pause() async {
         pauseCallCount += 1
+        isPlayingReturnValue = false
     }
 
     func resume() async {
         resumeCallCount += 1
+        isPlayingReturnValue = true
     }
 
     func stop() async {
         stopCallCount += 1
+        isPlayingReturnValue = false
+    }
+
+    /// Acts like a take that plays to its end: the real manager drops its player, so
+    /// isPlaying() is false and currentTime() reads 0.
+    func finishPlaying() {
+        isPlayingReturnValue = false
+        currentTimeReturnValue = 0
+    }
+
+    func isPlaying() async -> Bool {
+        isPlayingReturnValue
     }
 
     func currentTime() async -> TimeInterval {

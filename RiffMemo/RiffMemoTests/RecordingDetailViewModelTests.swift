@@ -77,6 +77,20 @@ final class RecordingDetailViewModelTests: XCTestCase {
         XCTAssertEqual(player.stopCallCount, 1)
     }
 
+    /// WAS-117 device test B: a take that played to its end left the button on "pause".
+    func testTakeThatPlaysToItsEndResetsThePlayButton() async throws {
+        let (viewModel, player) = makeViewModel()
+        viewModel.play()
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertTrue(viewModel.isPlaying)
+
+        player.finishPlaying()
+        try await Task.sleep(nanoseconds: 300_000_000) // The progress timer ticks every 0.1 s.
+
+        XCTAssertFalse(viewModel.isPlaying)
+        XCTAssertEqual(viewModel.currentTime, 0)
+    }
+
     func testSeekUpdatesCurrentTimeAndForwardsToThePlayer() async throws {
         let (viewModel, player) = makeViewModel()
 

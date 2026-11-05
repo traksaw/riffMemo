@@ -106,10 +106,13 @@ class RecordingDetailViewModel {
         playbackTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             Task { @MainActor in
+                let stillPlaying = await self.audioPlayer.isPlaying()
                 self.currentTime = await self.audioPlayer.currentTime()
 
-                // Check if playback finished
-                if self.currentTime >= self.duration {
+                // A take that plays to its end stops by itself. The playback manager then
+                // drops its player (WAS-117), so currentTime reads 0 and can never reach
+                // duration. Ask whether it is still playing instead.
+                if !stillPlaying || self.currentTime >= self.duration {
                     self.isPlaying = false
                     self.currentTime = 0
                     self.stopPlaybackTimer()
