@@ -29,6 +29,24 @@ TestFlight app (orange dot before the name) is installed now.
 
 ## Test entries
 
+### 2026-11-04 — WAS-117: the audio session coordinator
+
+- Build: Debug cable install of commit `aa7ff5f` (branch
+  `waskarpaulino/was-117-...`), opened from the Home Screen with no debugger.
+- **A. Music resumes after the click stops:** pass.
+- **B. Music resumes after a take plays to its end:** pass. Found a bug: the
+  play button stayed on "pause" after the take ended. Fixed in `41e6d53`.
+- **C. AirPods keep the sound across click, tuner, and playback:** pass.
+- **D. No stutter when recording starts over the click:** not tested. The
+  click is silent after the count-in (see below).
+- **Silent click after the count-in.** The count-in plays. No beats play
+  after it, in the standalone click or under a recording, on the speaker or
+  AirPods. The `main` build `b934efc` (before WAS-117) does the same, so
+  WAS-117 did not cause it. Likely cause, not yet proved: the main beats are
+  scheduled at a sample time that is already in the past
+  (`SharedMetronomeService.playRecordingBeat`, from WAS-53). Filed as
+  WAS-177, which also takes over test D.
+
 ### 2026-11-03 — WAS-113: TestFlight 1.0 (9) skips the compliance hold
 
 - Build: TestFlight 1.0 (9), from the WAS-113 branch (`main` plus the
