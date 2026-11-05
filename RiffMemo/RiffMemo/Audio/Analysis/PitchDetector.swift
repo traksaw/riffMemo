@@ -37,6 +37,9 @@ class PitchDetector: ObservableObject {
     private var audioEngine: AVAudioEngine?
     private var inputNode: AVAudioInputNode?
 
+    // The audio session demand held while detecting (WAS-117).
+    private var sessionToken: AudioSessionCoordinator.Token?
+
     // Reused across tap callbacks so the render thread doesn't allocate a new array every buffer.
     // `nonisolated(unsafe)`: written from processBuffer(_:sampleRate:), which — like the rest of
     // this class's tap-driven path — runs synchronously on Core Audio's real-time thread, not
@@ -50,11 +53,18 @@ class PitchDetector: ObservableObject {
     func startDetection() async throws {
         guard !isDetecting else { return }
 
-        // Setup audio session
-        try setupAudioSession()
+        // Ask the coordinator for a session with the mic (WAS-117). The old `.record`
+        // category turned off all output, which cut the click while tuning.
+        let token = try AudioSessionCoordinator.shared.acquire(.tune)
 
         // Setup audio engine
-        try setupAudioEngine()
+        do {
+            try setupAudioEngine()
+        } catch {
+            AudioSessionCoordinator.shared.release(token)
+            throw error
+        }
+        sessionToken = token
 
         isDetecting = true
         Logger.audio.info("Pitch detection started")
@@ -69,6 +79,12 @@ class PitchDetector: ObservableObject {
         // Stop engine
         audioEngine?.stop()
 
+        // Give the session back so Music can resume
+        if let sessionToken {
+            AudioSessionCoordinator.shared.release(sessionToken)
+            self.sessionToken = nil
+        }
+
         isDetecting = false
         frequency = 0.0
         note = ""
@@ -78,12 +94,6 @@ class PitchDetector: ObservableObject {
     }
 
     // MARK: - Private Methods
-
-    private func setupAudioSession() throws {
-        let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.record, mode: .measurement, options: [])
-        try session.setActive(true)
-    }
 
     private func setupAudioEngine() throws {
         let engine = AVAudioEngine()

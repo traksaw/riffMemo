@@ -106,10 +106,13 @@ class RecordingDetailViewModel {
         playbackTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             Task { @MainActor in
+                let stillPlaying = await self.audioPlayer.isPlaying()
                 self.currentTime = await self.audioPlayer.currentTime()
 
-                // Check if playback finished
-                if self.currentTime >= self.duration {
+                // A take that plays to its end stops by itself. The playback manager then
+                // drops its player (WAS-117), so currentTime reads 0 and can never reach
+                // duration. Ask whether it is still playing instead.
+                if !stillPlaying || self.currentTime >= self.duration {
                     self.isPlaying = false
                     self.currentTime = 0
                     self.stopPlaybackTimer()
@@ -126,77 +129,38 @@ class RecordingDetailViewModel {
     // MARK: - Audio Session Handling
 
     private func setupAudioSessionObservers() {
-        // Observe audio interruptions (phone calls, alarms, Siri, etc.)
-        NotificationCenter.default
-            .publisher(for: AVAudioSession.interruptionNotification)
-            .sink { [weak self] notification in
-                self?.handleInterruption(notification)
-            }
-            .store(in: &cancellables)
-
-        // Observe audio route changes (headphones unplugged, Bluetooth disconnected)
-        NotificationCenter.default
-            .publisher(for: AVAudioSession.routeChangeNotification)
-            .sink { [weak self] notification in
-                self?.handleRouteChange(notification)
+        // The coordinator parses interruption and route-change notifications once and
+        // publishes typed events (WAS-117).
+        AudioSessionCoordinator.shared.events
+            .sink { [weak self] event in
+                self?.handleAudioSessionEvent(event)
             }
             .store(in: &cancellables)
     }
 
-    private func handleInterruption(_ notification: Notification) {
-        guard let userInfo = notification.userInfo,
-              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
-              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else {
-            return
-        }
-
-        switch type {
-        case .began:
-            // Interruption began - pause playback
+    private func handleAudioSessionEvent(_ event: AudioSessionCoordinator.Event) {
+        switch event {
+        case .interruptionBegan:
+            // Phone call, alarm, Siri
             if isPlaying {
                 Logger.audio.info("Audio interruption began - pausing playback")
                 pause()
             }
 
-        case .ended:
-            // Interruption ended - could optionally resume
-            guard let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt else {
-                return
-            }
-            let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
-            if options.contains(.shouldResume) {
+        case .interruptionEnded(let shouldResume):
+            if shouldResume {
                 Logger.audio.info("Audio interruption ended - ready to resume playback")
-                // Optionally auto-resume: play()
             }
 
-        @unknown default:
-            Logger.audio.info("Unknown interruption type")
-        }
-    }
-
-    private func handleRouteChange(_ notification: Notification) {
-        guard let userInfo = notification.userInfo,
-              let reasonValue = userInfo[AVAudioSessionRouteChangeReasonKey] as? UInt,
-              let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) else {
-            return
-        }
-
-        switch reason {
-        case .oldDeviceUnavailable:
-            // Headphones unplugged - pause playback
+        case .audioDeviceLost:
+            // Headphones unplugged, Bluetooth disconnected
             if isPlaying {
                 Logger.audio.info("Audio device disconnected - pausing playback")
                 pause()
             }
 
-        case .newDeviceAvailable:
+        case .audioDeviceAdded:
             Logger.audio.info("New audio device connected")
-
-        case .routeConfigurationChange, .categoryChange, .override, .wakeFromSleep, .noSuitableRouteForCategory, .unknown:
-            break
-
-        @unknown default:
-            break
         }
     }
 }

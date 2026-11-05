@@ -41,6 +41,9 @@ actor AudioRecordingManager {
     // (unrelated, healthy) recording.
     private var recordingSession = 0
 
+    // The audio session demand held while recording; returned in stopEngineAndTap().
+    private var sessionToken: AudioSessionCoordinator.Token?
+
     // MARK: - Public Methods
 
     func startRecording() async throws {
@@ -48,15 +51,28 @@ actor AudioRecordingManager {
             throw AudioError.alreadyRecording
         }
 
+        // Ask the coordinator for a session that covers recording (WAS-117). This is a
+        // suspension point, so re-check the guard afterwards: a second start that raced in
+        // while we waited must not leave two engines writing.
+        let token = try await AudioSessionCoordinator.shared.acquire(.record)
+        guard !isRecording, sessionToken == nil else {
+            await AudioSessionCoordinator.shared.release(token)
+            throw AudioError.alreadyRecording
+        }
+        sessionToken = token
+
         // Clear any failure state left over from a previous recording
         failureError = nil
         recordingSession += 1
 
-        // Setup audio session
-        try setupAudioSession()
-
         // Setup audio engine
-        try setupAudioEngine(session: recordingSession)
+        do {
+            try setupAudioEngine(session: recordingSession)
+        } catch {
+            stopEngineAndTap()
+            clearEngineState()
+            throw error
+        }
 
         isRecording = true
         Logger.audio.info("Audio recording started")
@@ -122,27 +138,6 @@ actor AudioRecordingManager {
     }
 
     // MARK: - Private Methods
-
-    private func setupAudioSession() throws {
-        let session = AVAudioSession.sharedInstance()
-
-        // Check if audio is currently playing (metronome running)
-        let isAudioPlaying = session.isOtherAudioPlaying || session.secondaryAudioShouldBeSilencedHint
-
-        // Only reconfigure if session is not already compatible
-        // This prevents audio glitches when metronome is already playing
-        if !isAudioPlaying {
-            // No audio playing - safe to reconfigure
-            try session.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker])
-            try session.setActive(true)
-        } else {
-            // Audio is playing - only reconfigure if category is wrong
-            if session.category != .playAndRecord {
-                try session.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker])
-            }
-            // Don't call setActive(true) - it's already active and would cause reconfiguration
-        }
-    }
 
     private func setupAudioEngine(session: Int) throws {
         let engine = AVAudioEngine()
@@ -229,12 +224,25 @@ actor AudioRecordingManager {
         onRecordingFailed?(error)
     }
 
-    /// Removes the tap and stops the engine. Safe to call regardless of whether either is active.
+    /// Removes the tap, stops the engine and gives the audio session back. Safe to call
+    /// regardless of whether any of them is active.
     private func stopEngineAndTap() {
         if let inputNode {
             inputNode.removeTap(onBus: 0)
         }
         audioEngine?.stop()
+        releaseSession()
+    }
+
+    /// Returns this recording's session demand to the coordinator (WAS-117).
+    ///
+    /// Synchronous on purpose: `handleWriteFailure(_:session:)` relies on running without a
+    /// suspension point, so the release hops to the main actor in its own task. The engine
+    /// is already stopped, so the session can deactivate safely whenever that task runs.
+    private func releaseSession() {
+        guard let token = sessionToken else { return }
+        sessionToken = nil
+        Task { @MainActor in AudioSessionCoordinator.shared.release(token) }
     }
 
     /// Clears engine-related state so the next recording starts clean.
