@@ -65,10 +65,11 @@ class SharedMetronomeService: ObservableObject {
     private var nextBeatTime: TimeInterval = 0
     private var subdivisionCounter: Int = 0 // Tracks subdivision position (0 to clicksPerBeat-1)
 
-    // Sample-accurate scheduling using AVAudioTime
-    private var nextBeatSampleTime: AVAudioFramePosition = 0
-    private var isFirstBeatScheduled = false
-    private var startSampleTime: AVAudioFramePosition = 0
+    // Sample-accurate scheduling on the player node's own clock (WAS-177).
+    // nil means "not anchored yet": the next click anchors to the player's current time.
+    private var nextClickSampleTime: AVAudioFramePosition?
+    // How often the timer checks for a due click. Sets the scheduling lead.
+    private var timerCheckInterval: TimeInterval = 0
 
     // Pre-count
     private var preCountCompletionHandler: (() -> Void)?
@@ -186,9 +187,7 @@ class SharedMetronomeService: ObservableObject {
             state = .standalone  // Standalone metronome mode
 
             // Reset sample-accurate scheduling for precise timing
-            nextBeatSampleTime = 0
-            startSampleTime = 0
-            isFirstBeatScheduled = false
+            nextClickSampleTime = nil
 
             // Initialize nextBeatTime to trigger first beat immediately
             nextBeatTime = Date().timeIntervalSince1970
@@ -227,9 +226,7 @@ class SharedMetronomeService: ObservableObject {
             state = .preCount  // Pre-count mode
 
             // Reset sample-accurate scheduling for precise timing
-            nextBeatSampleTime = 0
-            startSampleTime = 0
-            isFirstBeatScheduled = false
+            nextClickSampleTime = nil
 
             // Set next beat time with a small delay to give SwiftUI time to render beat 1
             // This ensures the user sees "1" before the first click plays
@@ -269,8 +266,7 @@ class SharedMetronomeService: ObservableObject {
         state = .idle
 
         // Reset sample-accurate scheduling state
-        nextBeatSampleTime = 0
-        isFirstBeatScheduled = false
+        nextClickSampleTime = nil
 
         Logger.audio.info("Shared metronome stopped")
     }
@@ -621,6 +617,7 @@ class SharedMetronomeService: ObservableObject {
 
         timer.resume()
         dispatchTimer = timer
+        timerCheckInterval = interval
 
         Logger.audio.info("Timer started with interval: \(interval)s")
     }
@@ -718,13 +715,8 @@ class SharedMetronomeService: ObservableObject {
 
         guard let clickBuffer = buffer else { return }
 
-        // Schedule buffer FIRST
-        playerNode.scheduleBuffer(clickBuffer, at: nil, options: [], completionHandler: nil)
-
-        // Then ensure player is running
-        if !playerNode.isPlaying {
-            playerNode.play()
-        }
+        // Same grid as the beats after it, so the step from the count-in to beat 1 is even.
+        scheduleClick(clickBuffer, on: playerNode, secondsUntilNextClick: 60.0 / bpm)
 
         // Haptic feedback
         if isDownbeat {
@@ -811,71 +803,8 @@ class SharedMetronomeService: ObservableObject {
         print("🎵 Scheduling buffer - isPlaying: \(playerNode.isPlaying), volume: \(playerNode.volume)")
         #endif
 
-        // Get sample rate for timing calculations
-        guard let sampleRate = audioEngine?.mainMixerNode.outputFormat(forBus: 0).sampleRate else {
-            Logger.audio.error("Cannot get sample rate for timing")
-            return
-        }
+        scheduleClick(clickBuffer, on: playerNode, secondsUntilNextClick: 60.0 / bpm / Double(clicksPerBeat))
 
-        // Calculate sample-accurate timing (use clicksPerBeat already calculated above)
-        let beatDuration = 60.0 / bpm
-        let subdivisionDuration = beatDuration / Double(clicksPerBeat)
-        let samplesToNextBeat = AVAudioFramePosition(subdivisionDuration * sampleRate)
-
-        // Get current audio time
-        guard let nodeTime = playerNode.lastRenderTime,
-              let playerTime = playerNode.playerTime(forNodeTime: nodeTime) else {
-            // Render time isn't available yet (always true for the very first beat, and can
-            // persist indefinitely on the Simulator when CoreAudio keeps "abandoning I/O cycle
-            // because reconfig pending"). Schedule immediately without sample-accurate timing,
-            // but still advance the beat counters below — otherwise displayBeat/currentBeat
-            // freeze at 0 forever and the beat indicator never counts.
-            playerNode.scheduleBuffer(clickBuffer, at: nil, options: [], completionHandler: nil)
-
-            if !playerNode.isPlaying {
-                playerNode.play()
-            }
-
-            // Store starting sample time for future scheduling
-            if let now = audioEngine?.outputNode.lastRenderTime {
-                startSampleTime = now.sampleTime
-                nextBeatSampleTime = now.sampleTime + samplesToNextBeat
-            }
-
-            #if DEBUG
-            print("✓ First beat scheduled immediately")
-            #endif
-            advanceBeatState(isDownbeat: isDownbeat, isMainBeat: isMainBeat, clicksPerBeat: clicksPerBeat)
-            return
-        }
-
-        // Schedule at precise sample time for sample-accurate timing
-        let scheduleTime = AVAudioTime(sampleTime: nextBeatSampleTime, atRate: sampleRate)
-
-        playerNode.scheduleBuffer(clickBuffer, at: scheduleTime, options: [], completionHandler: { [weak self] in
-            #if DEBUG
-            DispatchQueue.main.async {
-                print("🎵 Buffer completed at sample time: \(self?.nextBeatSampleTime ?? 0)")
-            }
-            #endif
-        })
-
-        // Update next beat time using sample-accurate calculation
-        nextBeatSampleTime += samplesToNextBeat
-
-        // Ensure player is running
-        if !playerNode.isPlaying {
-            #if DEBUG
-            print("▶️ Starting player node")
-            #endif
-            playerNode.play()
-        }
-
-        #if DEBUG
-        print("✓ Buffer scheduled at sample time: \(nextBeatSampleTime) (+\(samplesToNextBeat) samples)")
-        #endif
-
-        // Debug logging
         #if DEBUG
         let beatNumber = currentBeat + 1
         let stateLabel = state == .recording ? "Recording" : "Standalone"
@@ -908,6 +837,69 @@ class SharedMetronomeService: ObservableObject {
         if subdivisionCounter == 0 {
             currentBeat = (currentBeat + 1) % timeSignature.beatsPerMeasure
         }
+    }
+}
+
+// MARK: - Click scheduling (WAS-177)
+
+extension SharedMetronomeService {
+
+    /// Extra time, past one timer check, for the audio thread to pick up a scheduled click.
+    nonisolated static let renderMargin: TimeInterval = 0.03
+
+    /// Schedules one click on the player node's own clock, then plans the next one.
+    ///
+    /// The player's clock starts at 0 when the player starts and keeps counting, through the
+    /// count-in too. A click scheduled at a time that has already passed plays nothing, which
+    /// is why the click went silent after the count-in (WAS-177). So the grid always comes
+    /// from the player's current time, never from the engine's output clock.
+    private func scheduleClick(_ buffer: AVAudioPCMBuffer,
+                               on playerNode: AVAudioPlayerNode,
+                               secondsUntilNextClick: TimeInterval) {
+        let sampleRate = playerNode.outputFormat(forBus: 0).sampleRate
+        guard let nodeTime = playerNode.lastRenderTime,
+              let playerTime = playerNode.playerTime(forNodeTime: nodeTime) else {
+            // The player has not rendered yet (the very first click). Play it now and anchor
+            // the grid on the next click, once the player's clock is readable.
+            playerNode.scheduleBuffer(buffer, at: nil, options: [], completionHandler: nil)
+            if !playerNode.isPlaying { playerNode.play() }
+            nextClickSampleTime = nil
+            return
+        }
+
+        let lead = Self.schedulingLead(checkInterval: timerCheckInterval, sampleRate: sampleRate)
+        let clickTime = Self.clickSampleTime(planned: nextClickSampleTime,
+                                             playerNow: playerTime.sampleTime,
+                                             lead: lead)
+        playerNode.scheduleBuffer(buffer,
+                                  at: AVAudioTime(sampleTime: clickTime, atRate: sampleRate),
+                                  options: [],
+                                  completionHandler: nil)
+        if !playerNode.isPlaying { playerNode.play() }
+        nextClickSampleTime = clickTime + AVAudioFramePosition(secondsUntilNextClick * sampleRate)
+    }
+
+    /// Where the next click goes on the player's clock.
+    ///
+    /// Keeps the planned grid while it is still ahead of the player. When there is no grid
+    /// yet, or the planned time already passed (a hitch, or a stale value), it anchors again
+    /// at `playerNow + lead`: one late click instead of silence from then on.
+    nonisolated static func clickSampleTime(planned: AVAudioFramePosition?,
+                                            playerNow: AVAudioFramePosition,
+                                            lead: AVAudioFramePosition) -> AVAudioFramePosition {
+        if let planned, planned >= playerNow {
+            return planned
+        }
+        return playerNow + lead
+    }
+
+    /// How far ahead of the player's current time to anchor the grid, in frames.
+    ///
+    /// The timer finds a click due up to one check interval late, so the grid must sit that
+    /// far ahead, plus a render margin, or late checks land in the past.
+    nonisolated static func schedulingLead(checkInterval: TimeInterval,
+                                           sampleRate: Double) -> AVAudioFramePosition {
+        AVAudioFramePosition((checkInterval + renderMargin) * sampleRate)
     }
 }
 

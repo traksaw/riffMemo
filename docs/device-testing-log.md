@@ -29,6 +29,20 @@ TestFlight app (orange dot before the name) is installed now.
 
 ## Test entries
 
+### 2026-11-05 — WAS-177: the click plays after the count-in
+
+- Build: Debug Wi-Fi install of branch `waskarpaulino/was-177-...` (before the
+  first commit), opened from the Home Screen with no debugger.
+- **1. Standalone click for 1 minute:** pass on the speaker and on AirPods.
+  Every beat plays.
+- **2. Click through a recording after the count-in:** pass.
+- **3. Step from count-in beat 4 to beat 1 (WAS-117 test D):** mostly good.
+  Waskar called it "a bit iffy". Details to follow.
+- Cause, proved with an offline `AVAudioPlayerNode` probe: a click scheduled at
+  a sample time the player's clock has already passed plays nothing. The app
+  scheduled main beats from 0 (after the count-in) or from the engine output
+  clock (standalone), never from the player's own clock.
+
 ### 2026-11-04 — WAS-117: the audio session coordinator
 
 - Build: Debug cable install of commit `aa7ff5f` (branch
