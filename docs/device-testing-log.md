@@ -29,6 +29,37 @@ TestFlight app (orange dot before the name) is installed now.
 
 ## Test entries
 
+### 2026-11-05 — WAS-177: the click plays after the count-in
+
+- Build: Debug installs of branch `waskarpaulino/was-177-...`, opened from the
+  Home Screen. Tests 1 and 2 ran on a Wi-Fi install. Test 3 ran on a cable install.
+- **1. Standalone click for 1 minute:** pass on the speaker and on AirPods.
+  Every beat plays.
+- **2. Click through a recording after the count-in:** pass.
+- **3. Step from count-in beat 4 to beat 1 (WAS-117 test D):** first run
+  "a bit iffy": a gap between the count-in and the recording beats. The
+  console log (cable launch with `devicectl --console`) showed the timer fire
+  recording beat 1 at 630.61 s, but the delayed task set `state = .recording`
+  only at 630.70 s. Beat 1 went to the count-in path, whose guard dropped it
+  silently. Fixed: the count-in ends when `preCountRemaining` reaches 0, not
+  when the state changes. Re-test on a cable install: **pass**, an even tempo
+  into beat 1.
+- **4. Follow-up fixes, cable install:** all pass.
+  - Stop right after count-in beat 4, then start the click again: it starts
+    normally. Before, the delayed task marked the stopped click as recording.
+  - Drag the tempo slider during the count-in: the recording still starts.
+    Before, `setBPM` restarted the click and reset the count-in, so the
+    recording never started.
+  - Drag the tempo slider during a recording: the tempo changes with no
+    stutter. Before, every slider step restarted the audio engine.
+  - Subdivisions on: the step from count-in beat 4 into beat 1 is even.
+- Gotcha: `Logger.debug` lines do not appear in `devicectl --console`. Only
+  `info` and higher, plus `print`, show up there.
+- Cause, proved with an offline `AVAudioPlayerNode` probe: a click scheduled at
+  a sample time the player's clock has already passed plays nothing. The app
+  scheduled main beats from 0 (after the count-in) or from the engine output
+  clock (standalone), never from the player's own clock.
+
 ### 2026-11-04 — WAS-117: the audio session coordinator
 
 - Build: Debug cable install of commit `aa7ff5f` (branch
