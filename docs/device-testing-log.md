@@ -43,7 +43,16 @@ TestFlight app (orange dot before the name) is installed now.
   only at 630.70 s. Beat 1 went to the count-in path, whose guard dropped it
   silently. Fixed: the count-in ends when `preCountRemaining` reaches 0, not
   when the state changes. Re-test on a cable install: **pass**, an even tempo
-  into beat 1. Not yet tried with subdivisions on.
+  into beat 1.
+- **4. Follow-up fixes, cable install:** all pass.
+  - Stop right after count-in beat 4, then start the click again: it starts
+    normally. Before, the delayed task marked the stopped click as recording.
+  - Drag the tempo slider during the count-in: the recording still starts.
+    Before, `setBPM` restarted the click and reset the count-in, so the
+    recording never started.
+  - Drag the tempo slider during a recording: the tempo changes with no
+    stutter. Before, every slider step restarted the audio engine.
+  - Subdivisions on: the step from count-in beat 4 into beat 1 is even.
 - Gotcha: `Logger.debug` lines do not appear in `devicectl --console`. Only
   `info` and higher, plus `print`, show up there.
 - Cause, proved with an offline `AVAudioPlayerNode` probe: a click scheduled at

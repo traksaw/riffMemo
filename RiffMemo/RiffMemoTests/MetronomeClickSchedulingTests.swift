@@ -62,3 +62,79 @@ struct MetronomeCountInHandoverTests {
         #expect(!SharedMetronomeService.isCountInClick(state: .standalone, preCountRemaining: 0))
     }
 }
+
+/// WAS-177 follow-ups, driven through the real shared metronome on the simulator.
+/// The bugs are about timing between real tasks, so pure helpers cannot show them.
+@MainActor
+@Suite(.serialized)
+struct MetronomeCountInLifecycleTests {
+
+    private let metronome = SharedMetronomeService.shared
+
+    /// Polls until `condition` is true or `timeout` passes. Returns the final value.
+    private func waitUntil(timeout: TimeInterval, _ condition: () -> Bool) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        return condition()
+    }
+
+    /// Stop inside the beat between the last count-in click and the switch to recording.
+    /// The delayed switch must not run after stop() and mark an idle click as recording.
+    @Test func stopDuringTheHandoverStaysIdle() async throws {
+        let savedBPM = metronome.bpm
+        defer { metronome.stop(); metronome.setBPM(savedBPM) }
+        metronome.setBPM(240)  // 0.25 s beats keep the test short
+
+        metronome.startWithPreCount {}
+        try #require(metronome.isPlaying)
+        let countInDone = await waitUntil(timeout: 3) { metronome.preCountRemaining == 0 }
+        try #require(countInDone)
+        #expect(metronome.state == .preCount)  // still inside the handover beat
+
+        metronome.stop()
+        try? await Task.sleep(nanoseconds: 500_000_000)  // past the end of the handover beat
+
+        #expect(metronome.state == .idle)
+        #expect(metronome.preCountRemaining == 0)
+    }
+
+    /// The bug: a tempo change during the count-in restarted the click as standalone, so the
+    /// count never reached 0 and the recording never started.
+    @Test func tempoChangeDuringTheCountInStillStartsTheRecording() async throws {
+        let savedBPM = metronome.bpm
+        defer { metronome.stop(); metronome.setBPM(savedBPM) }
+        metronome.setBPM(240)
+
+        var recordingStarted = false
+        metronome.startWithPreCount { recordingStarted = true }
+        try #require(metronome.isPlaying)
+        let firstBeatPlayed = await waitUntil(timeout: 2) { metronome.preCountRemaining < 4 }
+        try #require(firstBeatPlayed)
+
+        metronome.setBPM(250)
+
+        #expect(metronome.state == .preCount)
+        #expect(metronome.preCountRemaining > 0)
+        #expect(await waitUntil(timeout: 3) { recordingStarted })
+        #expect(await waitUntil(timeout: 2) { metronome.state == .recording })
+    }
+
+    /// A tempo change during a recording changes the tempo in place. It keeps the state.
+    @Test func tempoChangeDuringARecordingKeepsRecording() async throws {
+        let savedBPM = metronome.bpm
+        defer { metronome.stop(); metronome.setBPM(savedBPM) }
+        metronome.setBPM(240)
+
+        metronome.startWithPreCount {}
+        try #require(metronome.isPlaying)
+        try #require(await waitUntil(timeout: 4) { metronome.state == .recording })
+
+        metronome.setBPM(200)
+
+        #expect(metronome.isPlaying)
+        #expect(metronome.state == .recording)
+        #expect(metronome.bpm == 200)
+    }
+}

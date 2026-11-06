@@ -73,6 +73,9 @@ class SharedMetronomeService: ObservableObject {
 
     // Pre-count
     private var preCountCompletionHandler: (() -> Void)?
+    /// Switches the state to `.recording` one beat after the count-in. stop() cancels it,
+    /// or it would mark a stopped click as recording (WAS-177).
+    private var handoverTask: Task<Void, Never>?
 
     // MARK: - Metronome State
 
@@ -260,6 +263,11 @@ class SharedMetronomeService: ObservableObject {
         audioEngine?.stop()
         releaseAudioSession()
 
+        handoverTask?.cancel()
+        handoverTask = nil
+        preCountRemaining = 0
+        preCountCompletionHandler = nil
+
         isPlaying = false
         currentBeat = 0
         subdivisionCounter = 0
@@ -277,13 +285,11 @@ class SharedMetronomeService: ObservableObject {
         saveSettings()
 
         if isPlaying {
-            // Restart with new tempo. start() always resets state to .standalone, which
-            // would silently un-guard the Metronome tab's Stop control mid-recording —
-            // preserve whatever state we were actually in (WAS-53 follow-up).
-            let previousState = state
-            stop()
-            start()
-            state = previousState
+            // Change the tempo in place (WAS-177). Each click reads bpm when it schedules the
+            // next one, so only the timer's check interval must follow. A stop() and start()
+            // here reset the count-in, so a slider drag during the count-in blocked the
+            // recording, and every step during a recording restarted the audio engine.
+            restartTimer()
         }
     }
 
@@ -307,6 +313,11 @@ class SharedMetronomeService: ObservableObject {
     func setSubdivision(_ newSubdivision: Subdivision) {
         subdivision = newSubdivision
         saveSettings()
+
+        // The timer checks 4 times per click, so a finer subdivision needs a faster timer.
+        if isPlaying {
+            restartTimer()
+        }
     }
 
     func setClickSound(_ newSound: ClickSound) {
@@ -622,6 +633,14 @@ class SharedMetronomeService: ObservableObject {
         Logger.audio.info("Timer started with interval: \(interval)s")
     }
 
+    /// Swaps in a timer for the current tempo and subdivision. The engine, the state, the beat
+    /// counters, and the next planned click stay as they are, so the click does not restart.
+    private func restartTimer() {
+        dispatchTimer?.cancel()
+        dispatchTimer = nil
+        startTimer()
+    }
+
     private func checkAndPlayBeat() {
         // Update BPM if tempo ramping is enabled
         if tempoRampEnabled, let startTime = tempoRampStartTime {
@@ -754,10 +773,11 @@ class SharedMetronomeService: ObservableObject {
 
             // Delay state transition so the last countdown number stays visible
             // for the full beat duration before the overlay hides
-            Task { @MainActor in
+            let beatDuration = 60.0 / bpm
+            handoverTask = Task { @MainActor [weak self] in
                 // Wait one full beat duration before transitioning
-                let beatDuration = 60.0 / self.bpm
                 try? await Task.sleep(nanoseconds: UInt64(beatDuration * 1_000_000_000))
+                guard !Task.isCancelled, let self, self.state == .preCount else { return }
 
                 // Only the overlay waits for this. Beats already play as main beats, so do
                 // not reset currentBeat here: that would turn beat 2 into a second downbeat.
