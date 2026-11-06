@@ -56,6 +56,11 @@ final class Recording {
     var isFavorite: Bool = false
     var notes: String?
 
+    // WAS-118: true when a call (or similar) cut the take, or when it was recovered after
+    // iOS killed the app mid-take. The audio is complete up to the cut. Additive with an
+    // inline default, so SwiftData migrates existing stores lightweight (see SchemaVersioning).
+    var wasInterrupted: Bool = false
+
     init(
         id: UUID = UUID(),
         title: String,
@@ -79,7 +84,8 @@ final class Recording {
         analysisVersion: String? = nil,
         rating: Int = 0,
         isFavorite: Bool = false,
-        notes: String? = nil
+        notes: String? = nil,
+        wasInterrupted: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -104,5 +110,6 @@ final class Recording {
         self.rating = rating
         self.isFavorite = isFavorite
         self.notes = notes
+        self.wasInterrupted = wasInterrupted
     }
 }

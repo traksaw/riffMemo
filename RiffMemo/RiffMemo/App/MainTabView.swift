@@ -56,6 +56,10 @@ struct MainTabView: View {
                     Label("Settings", systemImage: "gearshape")
                 }
         }
+        .task {
+            // WAS-118: a take cut off by an app kill becomes a saved take again.
+            await OrphanTakeRecovery.recoverOnLaunch(modelContainer: modelContainer)
+        }
     }
 }
 

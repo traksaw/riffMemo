@@ -12,6 +12,7 @@ struct RecordingView: View {
     @State private var viewModel: RecordingViewModel
     @ObservedObject private var metronome = SharedMetronomeService.shared
     @State private var metronomeEnabled = false
+    @State private var playingInterruptedTake: Recording?
 
     init(viewModel: RecordingViewModel) {
         self.viewModel = viewModel
@@ -33,6 +34,16 @@ struct RecordingView: View {
         ZStack {
             VStack(spacing: 32) {
                 Spacer()
+
+                // WAS-118: a call cut the last take. It is saved; offer to keep going.
+                if let take = viewModel.interruptedTake, !viewModel.isRecording {
+                    InterruptedTakeCard(
+                        take: take,
+                        onContinue: { toggleRecording() },
+                        onPlay: { playingInterruptedTake = take }
+                    )
+                    .padding(.horizontal, 16)
+                }
 
                 // Timer with milliseconds
                 RecordingTimerView(
@@ -219,6 +230,23 @@ struct RecordingView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color(.systemBackground).opacity(0.95))
                 .transition(.opacity)
+            }
+        }
+        .onChange(of: viewModel.interruptedTake?.id) { _, takeID in
+            // The call stopped the take, so the click under it stops too.
+            if takeID != nil, metronome.isPlaying {
+                metronome.stop()
+            }
+        }
+        .sheet(item: $playingInterruptedTake) { take in
+            NavigationStack {
+                RecordingDetailView(
+                    recording: take,
+                    viewModel: RecordingDetailViewModel(
+                        recording: take,
+                        audioPlayer: AudioPlaybackManager()
+                    )
+                )
             }
         }
         .alert("Recording Error", isPresented: $viewModel.showError) {

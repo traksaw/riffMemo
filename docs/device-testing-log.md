@@ -29,6 +29,30 @@ TestFlight app (orange dot before the name) is installed now.
 
 ## Test entries
 
+### 2026-11-05 — WAS-118: keep recording through lock, background, calls, and kills
+
+- Build: Debug cable install of branch `waskarpaulino/was-118-...`, launched
+  from the Mac with `devicectl --console` so each event shows in the log.
+- **1. Lock mid-take:** pass. Recorded, locked the phone, unlocked, stopped:
+  the take is 1:03 with no gap.
+- **2. Background mid-take:** pass. The take is 0:32, the whole time away.
+- **3. A call mid-take:** pass. The log shows `interruptionBegan` at
+  21:35:50 and the take saved at 0:45, 0.55 s after the cut. The Record tab
+  showed "A call stopped your recording" with "SAVED 0:45". Play and
+  "Continue as a new take" worked. Found: the card's second line truncated
+  ("Nothing wa…"); fixed to wrap.
+- **4. Force quit mid-take:** pass. A take started at 21:38:05, and the app
+  was killed at about 21:38:27. On the next launch the log showed
+  `Recovered an orphan take: …, 21.900000s`. The take appeared as
+  "Recovered Recording" and was analyzed.
+- **5. Upgrade over an existing library:** pass. The new `wasInterrupted`
+  field migrated lightweight; all 20 recordings loaded.
+- Gotcha: `devicectl device process launch` waits silently while the phone is
+  locked. Unlock first, or the launch never prints anything.
+- Side finding, not WAS-118: one call logged "ready to resume playback" 19
+  times. The Library builds a playback view model for every row up front, and
+  each one listens for audio session events.
+
 ### 2026-11-05 — WAS-177: the click plays after the count-in
 
 - Build: Debug installs of branch `waskarpaulino/was-177-...`, opened from the
