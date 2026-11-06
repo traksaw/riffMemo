@@ -38,6 +38,14 @@ jobs:
     # same class of hang has recurred occasionally even on macos-15 — the
     # timeout below ensures a hang fails the job within minutes instead of
     # silently consuming the default 360-minute job timeout.
+    #
+    # Concurrency parity (WAS-181): Xcode 16.4 (Swift 6.1) does not know the
+    # Swift 6.2 build settings SWIFT_DEFAULT_ACTOR_ISOLATION and
+    # SWIFT_APPROACHABLE_CONCURRENCY. It ignores them, so a Mac on Xcode 26+
+    # compiled by different rules than CI, and code that built locally failed
+    # here. The project no longer sets either one. Until this job runs Xcode
+    # 26+, mark actor isolation explicitly (@MainActor or nonisolated) on new
+    # types, and do not turn those two settings back on.
     runs-on: macos-15
     timeout-minutes: 30
 

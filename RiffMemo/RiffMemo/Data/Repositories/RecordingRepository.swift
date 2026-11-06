@@ -40,7 +40,8 @@ class SwiftDataRecordingRepository: RecordingRepository {
     /// is released (seen from the test target on Xcode 26.1 and 27.1). The deinit does
     /// no main-actor work, so it doesn't need the hop. Swift 6.1 (CI's Xcode 16.4) has no
     /// isolated deinits, so every deinit there is already nonisolated and the syntax
-    /// doesn't compile.
+    /// doesn't compile. WAS-181 removed that build setting, so this is kept only as a guard
+    /// in case it comes back once CI moves to Xcode 26+.
     #if compiler(>=6.2)
     nonisolated deinit {}
     #endif
