@@ -17,6 +17,10 @@ import SwiftData
 ///
 /// Deletes move a take's file out of Documents before the row goes (see
 /// `SwiftDataRecordingRepository.delete`), so a deleted take never comes back here.
+///
+/// `@MainActor` is explicit, not left to the project's default isolation: CI builds with
+/// Xcode 16.4, which predates default isolation and would leave this enum nonisolated.
+@MainActor
 enum OrphanTakeRecovery {
 
     static let recoveredTitle = "Recovered Recording"
