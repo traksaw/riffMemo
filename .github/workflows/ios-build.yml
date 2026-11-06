@@ -46,8 +46,16 @@ jobs:
     # here. The project no longer sets either one. Until this job runs Xcode
     # 26+, mark actor isolation explicitly (@MainActor or nonisolated) on new
     # types, and do not turn those two settings back on.
+    #
+    # DEVELOPER_DIR pins the Xcode version instead of taking the runner
+    # image's default, which GitHub changes without notice. If the image ever
+    # drops this Xcode, the job fails loudly instead of silently compiling by
+    # new rules. scripts/ci-parity-build.sh reads this line to build locally
+    # with the same Xcode, and CIConcurrencyParityTests fails if the pin goes.
     runs-on: macos-15
     timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
 
     strategy:
       fail-fast: false
