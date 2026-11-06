@@ -10,6 +10,7 @@ import Observation
 import AVFoundation
 import Combine
 import OSLog
+import UIKit
 
 /// ViewModel for the recording screen
 @MainActor
@@ -31,6 +32,11 @@ class RecordingViewModel {
     // Error handling
     var errorMessage: String?
     var showError: Bool = false
+
+    /// The take a call (or Siri, or an alarm) cut off, saved up to the cut (WAS-118). The
+    /// Record screen shows the "A call stopped your recording" card while this is set.
+    /// Starting the next take clears it.
+    var interruptedTake: Recording?
 
     // MARK: - Dependencies
 
@@ -96,6 +102,7 @@ class RecordingViewModel {
 
                 try await audioRecorder.startRecording()
                 isRecording = true
+                interruptedTake = nil
                 currentDuration = 0
                 waveformBuffer.removeAll()
                 waveformSamples = []
@@ -112,11 +119,27 @@ class RecordingViewModel {
     }
 
     func stopRecording() {
+        stopRecording(interrupted: false)
+    }
+
+    /// - Parameter interrupted: true when a call (or similar) cut the take (WAS-118). The take
+    ///   is saved the same way, marked as interrupted, and offered on the card.
+    private func stopRecording(interrupted: Bool) {
         guard isRecording, !isStoppingRecording else { return }
         isStoppingRecording = true
         stopDurationTimer()
+
+        // A call can send the app to the background. Ask iOS for time to finish the save,
+        // or a suspension between the stop and the save leaves an orphan file. The expiration
+        // handler must end the task too: iOS kills an app whose background time runs out with
+        // a task still open. If that happens, the next launch recovers the file instead.
+        let backgroundTask = BackgroundTaskHandle(name: "Save cut take")
+
         Task {
-            defer { isStoppingRecording = false }
+            defer {
+                isStoppingRecording = false
+                backgroundTask.end()
+            }
             do {
                 let duration = currentDuration
                 let recording = try await audioRecorder.stopRecording(
@@ -124,8 +147,12 @@ class RecordingViewModel {
                     recordedWithBPM: recordingBPM,
                     recordedWithTimeSignature: recordingTimeSignature
                 )
+                recording.wasInterrupted = interrupted
 
                 try await repository.save(recording)
+                if interrupted {
+                    interruptedTake = recording
+                }
                 Logger.audio.info("Recording stopped and saved with duration: \(duration)s")
 
                 // Only flip to "stopped" once the recording is durably persisted — a caller
@@ -233,13 +260,15 @@ class RecordingViewModel {
             .store(in: &cancellables)
     }
 
-    private func handleAudioSessionEvent(_ event: AudioSessionCoordinator.Event) {
+    /// Internal, not private, so tests can send events without the shared coordinator.
+    func handleAudioSessionEvent(_ event: AudioSessionCoordinator.Event) {
         switch event {
         case .interruptionBegan:
-            // Phone call, alarm, Siri
+            // Phone call, alarm, Siri. iOS has already stopped the input, so save what
+            // was recorded up to the cut (WAS-118).
             if isRecording {
-                Logger.audio.info("Audio interruption began - stopping recording")
-                stopRecording()
+                Logger.audio.info("Audio interruption began - saving the take up to the cut")
+                stopRecording(interrupted: true)
             }
 
         case .interruptionEnded(let shouldResume):
@@ -257,5 +286,25 @@ class RecordingViewModel {
         case .audioDeviceAdded:
             Logger.audio.info("New audio device connected")
         }
+    }
+}
+
+/// One `UIApplication` background task that ends exactly once: from the code that finishes
+/// the work, or from iOS's expiration handler, whichever comes first (WAS-118).
+@MainActor
+private final class BackgroundTaskHandle {
+    private var identifier: UIBackgroundTaskIdentifier = .invalid
+
+    init(name: String) {
+        identifier = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+            // iOS calls this on the main thread when the time is almost up.
+            MainActor.assumeIsolated { self?.end() }
+        }
+    }
+
+    func end() {
+        guard identifier != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(identifier)
+        identifier = .invalid
     }
 }

@@ -12,6 +12,7 @@ struct RecordingView: View {
     @State private var viewModel: RecordingViewModel
     @ObservedObject private var metronome = SharedMetronomeService.shared
     @State private var metronomeEnabled = false
+    @State private var playingInterruptedTake: Recording?
 
     init(viewModel: RecordingViewModel) {
         self.viewModel = viewModel
@@ -34,6 +35,16 @@ struct RecordingView: View {
             VStack(spacing: 32) {
                 Spacer()
 
+                // WAS-118: a call cut the last take. It is saved; offer to keep going.
+                if let take = viewModel.interruptedTake, !viewModel.isRecording {
+                    InterruptedTakeCard(
+                        take: take,
+                        onContinue: { toggleRecording() },
+                        onPlay: { playingInterruptedTake = take }
+                    )
+                    .padding(.horizontal, 16)
+                }
+
                 // Timer with milliseconds
                 RecordingTimerView(
                     duration: viewModel.currentDuration,
@@ -42,13 +53,17 @@ struct RecordingView: View {
                 )
                 .opacity(metronome.preCountRemaining > 0 ? 0 : 1)
 
-                // Live Waveform (Apple Voice Memos style)
-                LiveWaveformView(
-                    samples: viewModel.waveformSamples,
-                    isRecording: viewModel.isRecording
-                )
-                .frame(height: 120)
-                .padding(.horizontal, 32)
+                // Live Waveform (Apple Voice Memos style). Hidden while the interrupted-take
+                // card shows: it is empty when idle, and the card needs its height, or the
+                // Record button's label slides under the tab bar (seen on device, WAS-118).
+                if viewModel.interruptedTake == nil || viewModel.isRecording {
+                    LiveWaveformView(
+                        samples: viewModel.waveformSamples,
+                        isRecording: viewModel.isRecording
+                    )
+                    .frame(height: 120)
+                    .padding(.horizontal, 32)
+                }
 
             // Visual Beat Indicator (during recording with metronome)
             if viewModel.isRecording && metronomeEnabled && metronome.isPlaying {
@@ -219,6 +234,23 @@ struct RecordingView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color(.systemBackground).opacity(0.95))
                 .transition(.opacity)
+            }
+        }
+        .onChange(of: viewModel.interruptedTake?.id) { _, takeID in
+            // The call stopped the take, so the click under it stops too.
+            if takeID != nil, metronome.isPlaying {
+                metronome.stop()
+            }
+        }
+        .sheet(item: $playingInterruptedTake) { take in
+            NavigationStack {
+                RecordingDetailView(
+                    recording: take,
+                    viewModel: RecordingDetailViewModel(
+                        recording: take,
+                        audioPlayer: AudioPlaybackManager()
+                    )
+                )
             }
         }
         .alert("Recording Error", isPresented: $viewModel.showError) {
