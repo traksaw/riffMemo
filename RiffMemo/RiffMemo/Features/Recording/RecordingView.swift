@@ -53,13 +53,17 @@ struct RecordingView: View {
                 )
                 .opacity(metronome.preCountRemaining > 0 ? 0 : 1)
 
-                // Live Waveform (Apple Voice Memos style)
-                LiveWaveformView(
-                    samples: viewModel.waveformSamples,
-                    isRecording: viewModel.isRecording
-                )
-                .frame(height: 120)
-                .padding(.horizontal, 32)
+                // Live Waveform (Apple Voice Memos style). Hidden while the interrupted-take
+                // card shows: it is empty when idle, and the card needs its height, or the
+                // Record button's label slides under the tab bar (seen on device, WAS-118).
+                if viewModel.interruptedTake == nil || viewModel.isRecording {
+                    LiveWaveformView(
+                        samples: viewModel.waveformSamples,
+                        isRecording: viewModel.isRecording
+                    )
+                    .frame(height: 120)
+                    .padding(.horizontal, 32)
+                }
 
             // Visual Beat Indicator (during recording with metronome)
             if viewModel.isRecording && metronomeEnabled && metronome.isPlaying {
