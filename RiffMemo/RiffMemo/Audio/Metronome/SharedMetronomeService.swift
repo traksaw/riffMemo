@@ -652,11 +652,15 @@ class SharedMetronomeService: ObservableObject {
             print("✅ Time to play beat!")
             #endif
 
+            // Decide before playBeat(), which counts the count-in down. The click after the
+            // last count-in beat is a full beat away, so it must use the count-in interval too.
+            let wasCountInClick = Self.isCountInClick(state: state, preCountRemaining: preCountRemaining)
+
             playBeat()
 
             // Calculate next beat/subdivision time
             // During pre-count, always use full beat intervals (ignore subdivisions)
-            let clicksPerBeat = state == .preCount ? 1 : subdivision.clicksPerBeat
+            let clicksPerBeat = wasCountInClick ? 1 : subdivision.clicksPerBeat
             let subdivisionDuration = 60.0 / bpm / Double(clicksPerBeat)
 
             // Add duration to previous time to avoid drift
@@ -680,11 +684,12 @@ class SharedMetronomeService: ObservableObject {
         case .idle:
             return
 
-        case .preCount:
-            playPreCountBeat()
-
-        case .recording, .standalone:
-            playRecordingBeat()
+        case .preCount, .recording, .standalone:
+            if Self.isCountInClick(state: state, preCountRemaining: preCountRemaining) {
+                playPreCountBeat()
+            } else {
+                playRecordingBeat()
+            }
         }
     }
 
@@ -735,6 +740,10 @@ class SharedMetronomeService: ObservableObject {
 
         // Transition to recording when pre-count finishes
         if preCountRemaining == 0 {
+            // Beat 1 can play before the delayed task below runs (WAS-177), so reset the
+            // counter now. Then the next click is always the accent downbeat.
+            currentBeat = 0
+
             // Call completion handler to start recording
             if let completion = preCountCompletionHandler {
                 Task { @MainActor in
@@ -750,8 +759,9 @@ class SharedMetronomeService: ObservableObject {
                 let beatDuration = 60.0 / self.bpm
                 try? await Task.sleep(nanoseconds: UInt64(beatDuration * 1_000_000_000))
 
+                // Only the overlay waits for this. Beats already play as main beats, so do
+                // not reset currentBeat here: that would turn beat 2 into a second downbeat.
                 self.state = .recording
-                self.currentBeat = 0  // Reset to 0 so next beat will be the accent downbeat
 
                 Logger.audio.info("Pre-count complete → transitioned to recording")
             }
@@ -900,6 +910,15 @@ extension SharedMetronomeService {
     nonisolated static func schedulingLead(checkInterval: TimeInterval,
                                            sampleRate: Double) -> AVAudioFramePosition {
         AVAudioFramePosition((checkInterval + renderMargin) * sampleRate)
+    }
+
+    /// True while a click belongs to the count-in.
+    ///
+    /// The state stays `.preCount` for one beat after the count-in ends, so the overlay can
+    /// show the last number. The count-in is over when `preCountRemaining` reaches 0, not
+    /// when the state changes.
+    static func isCountInClick(state: MetronomeState, preCountRemaining: Int) -> Bool {
+        state == .preCount && preCountRemaining > 0
     }
 }
 

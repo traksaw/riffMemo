@@ -31,13 +31,21 @@ TestFlight app (orange dot before the name) is installed now.
 
 ### 2026-11-05 — WAS-177: the click plays after the count-in
 
-- Build: Debug Wi-Fi install of branch `waskarpaulino/was-177-...` (before the
-  first commit), opened from the Home Screen with no debugger.
+- Build: Debug installs of branch `waskarpaulino/was-177-...`, opened from the
+  Home Screen. Tests 1 and 2 ran on a Wi-Fi install. Test 3 ran on a cable install.
 - **1. Standalone click for 1 minute:** pass on the speaker and on AirPods.
   Every beat plays.
 - **2. Click through a recording after the count-in:** pass.
-- **3. Step from count-in beat 4 to beat 1 (WAS-117 test D):** mostly good.
-  Waskar called it "a bit iffy". Details to follow.
+- **3. Step from count-in beat 4 to beat 1 (WAS-117 test D):** first run
+  "a bit iffy": a gap between the count-in and the recording beats. The
+  console log (cable launch with `devicectl --console`) showed the timer fire
+  recording beat 1 at 630.61 s, but the delayed task set `state = .recording`
+  only at 630.70 s. Beat 1 went to the count-in path, whose guard dropped it
+  silently. Fixed: the count-in ends when `preCountRemaining` reaches 0, not
+  when the state changes. Re-test on a cable install: **pass**, an even tempo
+  into beat 1. Not yet tried with subdivisions on.
+- Gotcha: `Logger.debug` lines do not appear in `devicectl --console`. Only
+  `info` and higher, plus `print`, show up there.
 - Cause, proved with an offline `AVAudioPlayerNode` probe: a click scheduled at
   a sample time the player's clock has already passed plays nothing. The app
   scheduled main beats from 0 (after the count-in) or from the engine output

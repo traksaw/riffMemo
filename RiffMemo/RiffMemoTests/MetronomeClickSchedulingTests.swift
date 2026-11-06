@@ -40,3 +40,25 @@ struct MetronomeClickSchedulingTests {
         #expect(frames == AVAudioFramePosition((0.125 + 0.03) * 48_000))
     }
 }
+
+/// WAS-177 test 3: the timer can fire recording beat 1 before the delayed task flips the state
+/// to `.recording`. That click must still play as a main beat, at the main-beat interval.
+@MainActor
+struct MetronomeCountInHandoverTests {
+
+    @Test func countInBeatsStillPlayAsCountIn() {
+        #expect(SharedMetronomeService.isCountInClick(state: .preCount, preCountRemaining: 4))
+        #expect(SharedMetronomeService.isCountInClick(state: .preCount, preCountRemaining: 1))
+    }
+
+    /// The bug: state is still `.preCount`, but the count-in is over. Routing it to the
+    /// count-in path dropped beat 1 and left a gap.
+    @Test func firstBeatAfterTheCountInPlaysAsAMainBeat() {
+        #expect(!SharedMetronomeService.isCountInClick(state: .preCount, preCountRemaining: 0))
+    }
+
+    @Test func recordingAndStandaloneBeatsAreNotCountIn() {
+        #expect(!SharedMetronomeService.isCountInClick(state: .recording, preCountRemaining: 0))
+        #expect(!SharedMetronomeService.isCountInClick(state: .standalone, preCountRemaining: 0))
+    }
+}
